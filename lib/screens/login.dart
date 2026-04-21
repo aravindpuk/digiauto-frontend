@@ -1,31 +1,38 @@
 import 'package:digiauto/cubit/login/login_cubit.dart';
 import 'package:digiauto/cubit/login/login_state.dart';
+import 'package:digiauto/custom_widgets/scaffold_messenger.dart';
+import 'package:digiauto/screens/garage.dart';
 import 'package:digiauto/screens/home.dart';
 import 'package:digiauto/screens/register.dart';
+
+import 'package:digiauto/utils/enums.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 class LoginScreen extends StatelessWidget {
   LoginScreen({super.key});
 
-  final mobileController = TextEditingController();
-  final pinController = TextEditingController();
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
     final secondaryColor = Theme.of(context).colorScheme.secondary;
-    return BlocListener(
+    return BlocListener<LoginCubit, LoginState>(
       listener: (context, state) {
         if (state is LoginFailure) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(state.message)));
+          showSnackBar(context, state.message, SnackType.error);
         }
         if (state is LoginSuccess) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => HomeScreen()),
-          );
+          if (state.garageId == null) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => GarageProvider()),
+            );
+          } else {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => HomeScreen()),
+            );
+          }
         }
       },
       child: Scaffold(
@@ -92,7 +99,7 @@ class LoginScreen extends StatelessWidget {
                           // 🔹 Mobile Number
                           TextField(
                             keyboardType: TextInputType.phone,
-                            controller: mobileController,
+
                             decoration: InputDecoration(
                               filled: true,
                               fillColor: Colors.white,
@@ -114,12 +121,8 @@ class LoginScreen extends StatelessWidget {
                                 color: secondaryColor,
                               ),
                             ),
-                            onChanged: (_) {
-                              context.read<LoginCubit>().onInputChanged(
-                                mobileController.text,
-                                pinController.text,
-                              );
-                            },
+                            onChanged: (value) =>
+                                context.read<LoginCubit>().mobileChanged(value),
                           ),
 
                           const SizedBox(height: 20),
@@ -127,7 +130,7 @@ class LoginScreen extends StatelessWidget {
                           // 🔹 4-digit PIN
                           TextField(
                             obscureText: true,
-                            controller: pinController,
+
                             maxLength: 4,
                             keyboardType: TextInputType.number,
                             decoration: InputDecoration(
@@ -152,12 +155,8 @@ class LoginScreen extends StatelessWidget {
                                 color: secondaryColor,
                               ),
                             ),
-                            onChanged: (_) {
-                              context.read<LoginCubit>().onInputChanged(
-                                mobileController.text,
-                                pinController.text,
-                              );
-                            },
+                            onChanged: (value) =>
+                                context.read<LoginCubit>().pinChanged(value),
                           ),
 
                           const SizedBox(height: 30),
@@ -167,10 +166,8 @@ class LoginScreen extends StatelessWidget {
                             width: double.infinity,
                             child: BlocBuilder<LoginCubit, LoginState>(
                               builder: (context, state) {
-                                bool enabled =
-                                    state is LoginInitial &&
-                                    state.loginBtnStatus == true;
-                                if (state is LoginLoading) {
+                                bool enabled = true;
+                                if (state.isLoading) {
                                   return const Center(
                                     child: CircularProgressIndicator(),
                                   );
@@ -178,18 +175,13 @@ class LoginScreen extends StatelessWidget {
                                   return ElevatedButton(
                                     onPressed: enabled
                                         ? () {
-                                            // TODO: Implement your login logic
-
-                                            context.read<LoginCubit>().login(
-                                              mobileController.text,
-                                              pinController.text,
+                                            // context.read<LoginCubit>().login();
+                                            Navigator.pushReplacement(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => HomeScreen(),
+                                              ),
                                             );
-                                            // Navigator.pushReplacement(
-                                            //   context,
-                                            //   MaterialPageRoute(
-                                            //     builder: (_) => HomeScreen(),
-                                            //   ),s
-                                            // );
                                           }
                                         : null,
                                     style: ElevatedButton.styleFrom(
@@ -235,7 +227,9 @@ class LoginScreen extends StatelessWidget {
                                   Navigator.pushReplacement(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) => const UserRegister(),
+                                      builder: (_) => const UserProvider(
+                                        role: userType.admin,
+                                      ),
                                     ),
                                   );
                                 },

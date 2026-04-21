@@ -1,19 +1,38 @@
-import 'package:digiauto/screens/home.dart';
+import 'package:digiauto/cubit/garage/garage_cubit.dart';
+import 'package:digiauto/cubit/garage/garage_state.dart';
+import 'package:digiauto/screens/maps.dart';
+import 'package:digiauto/services/garage_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
+class GarageProvider extends StatelessWidget {
+  const GarageProvider({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocProvider(
+      create: (_) => GarageCubit(GarageService()),
+      child: GarageScreen(),
+    );
+  }
+}
 
 class GarageScreen extends StatelessWidget {
   const GarageScreen({super.key});
-
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).primaryColor;
     final secondaryColor = Theme.of(context).colorScheme.secondary;
+
+    final cubit = context.read<GarageCubit>();
+
+    final locationController = TextEditingController();
+
     return Scaffold(
       body: SafeArea(
         child: SingleChildScrollView(
           child: Container(
             height: MediaQuery.of(context).size.height,
-
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
@@ -43,7 +62,7 @@ class GarageScreen extends StatelessWidget {
                   child: Container(
                     margin: EdgeInsets.only(top: 52.0),
                     width: MediaQuery.of(context).size.width * 0.85,
-                    height: MediaQuery.of(context).size.height * 0.68,
+                    // height: MediaQuery.of(context).size.height * 0.68,
                     decoration: const BoxDecoration(
                       // color: Colors.white,
                       color: Color(0xFFF8F9FA),
@@ -81,11 +100,27 @@ class GarageScreen extends StatelessWidget {
                         const SizedBox(height: 40),
                         // user name
                         TextField(
-                          keyboardType: TextInputType.phone,
+                          keyboardType: TextInputType.text,
                           decoration: InputDecoration(
                             filled: true,
                             fillColor: Colors.white,
-                            labelText: "Garage Name",
+                            // labelText: "Garage Name",
+                            label: RichText(
+                              text: TextSpan(
+                                text: 'Garage Name',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                ), // normal label color
+                                children: [
+                                  TextSpan(
+                                    text: ' *',
+                                    style: TextStyle(
+                                      color: Colors.red,
+                                    ), // red star
+                                  ),
+                                ],
+                              ),
+                            ),
                             labelStyle: Theme.of(context).textTheme.bodySmall,
                             enabledBorder: OutlineInputBorder(
                               borderSide: BorderSide(color: primaryColor),
@@ -103,6 +138,7 @@ class GarageScreen extends StatelessWidget {
                               color: secondaryColor,
                             ),
                           ),
+                          onChanged: (value) => cubit.garageUpdate(value),
                         ),
                         const SizedBox(height: 20),
 
@@ -112,7 +148,23 @@ class GarageScreen extends StatelessWidget {
                           decoration: InputDecoration(
                             filled: true,
                             fillColor: Colors.white,
-                            labelText: "Mobile Number",
+                            // labelText: "Mobile Number",
+                            label: RichText(
+                              text: TextSpan(
+                                text: 'Mobile Number',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                ), // normal label color
+                                children: [
+                                  TextSpan(
+                                    text: ' *',
+                                    style: TextStyle(
+                                      color: Colors.red,
+                                    ), // red star
+                                  ),
+                                ],
+                              ),
+                            ),
                             labelStyle: Theme.of(context).textTheme.bodySmall,
                             enabledBorder: OutlineInputBorder(
                               borderSide: BorderSide(color: primaryColor),
@@ -130,6 +182,7 @@ class GarageScreen extends StatelessWidget {
                               color: secondaryColor,
                             ),
                           ),
+                          onChanged: (value) => cubit.mobileUpdate(value),
                         ),
 
                         const SizedBox(height: 20),
@@ -159,16 +212,34 @@ class GarageScreen extends StatelessWidget {
                               color: secondaryColor,
                             ),
                           ),
+                          onChanged: (value) => cubit.emailUpdate(value),
                         ),
                         const SizedBox(height: 20.0),
                         //location
                         TextField(
-                          maxLength: 4,
-                          keyboardType: TextInputType.number,
+                          readOnly: true,
+                          keyboardType: TextInputType.text,
+
                           decoration: InputDecoration(
                             filled: true,
                             fillColor: Colors.white,
-                            labelText: "Location",
+                            // labelText: "Location",
+                            label: RichText(
+                              text: TextSpan(
+                                text: 'Location',
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                ), // normal label color
+                                children: [
+                                  TextSpan(
+                                    text: ' *',
+                                    style: TextStyle(
+                                      color: Colors.red,
+                                    ), // red star
+                                  ),
+                                ],
+                              ),
+                            ),
                             counterText: "",
                             labelStyle: Theme.of(context).textTheme.bodySmall,
                             enabledBorder: OutlineInputBorder(
@@ -182,9 +253,28 @@ class GarageScreen extends StatelessWidget {
                               ),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            prefixIcon: Icon(
-                              Icons.place,
+                            prefixIcon: IconButton(
+                              icon: const Icon(Icons.location_on),
                               color: secondaryColor,
+                              onPressed: () async {
+                                final result = await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const MapPickerScreen(),
+                                  ),
+                                );
+
+                                if (result != null) {
+                                  cubit.locationUpdate(
+                                    lat: result['lat'],
+                                    long: result['lng'],
+                                  );
+
+                                  locationController.text =
+                                      "${result['lat']}, ${result['lng']}";
+                                }
+                              },
                             ),
                           ),
                         ),
@@ -192,34 +282,45 @@ class GarageScreen extends StatelessWidget {
                         const SizedBox(height: 30),
 
                         // 🔹 Login Button
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              // TODO: Implement your login logic
-                              Navigator.pushReplacement(
-                                context,
-                                MaterialPageRoute(builder: (_) => HomeScreen()),
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: secondaryColor,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                        BlocBuilder<GarageCubit, GarageState>(
+                          builder: (context, state) {
+                            if (state.isLoading) {
+                              return CircularProgressIndicator();
+                            }
+                            return SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: state.isValid
+                                    ? () {
+                                        // TODO: Implement your login logic
+
+                                        context
+                                            .read<GarageCubit>()
+                                            .registerGarage();
+                                      }
+                                    : null,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: secondaryColor,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  elevation: 6,
+                                  shadowColor: primaryColor.withOpacity(0.4),
+                                ),
+                                child: const Text(
+                                  "Register",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
-                              elevation: 6,
-                              shadowColor: primaryColor.withOpacity(0.4),
-                            ),
-                            child: const Text(
-                              "Register",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
+                            );
+                          },
                         ),
                       ],
                     ),

@@ -1,9 +1,9 @@
 import 'package:animated_bottom_navigation_bar/animated_bottom_navigation_bar.dart';
-import 'package:digiauto/modal/labour.dart';
+import 'package:digiauto/custom_widgets/assistant_button.dart';
+import 'package:digiauto/models/job_card.dart';
 import 'package:digiauto/screens/job_details.dart';
-import 'package:digiauto/screens/jobcard.dart';
 import 'package:digiauto/screens/reports.dart';
-import 'package:digiauto/screens/spare.dart';
+import 'package:digiauto/services/jobcard_service.dart';
 import 'package:flutter/material.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -16,16 +16,15 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final JobcardService _jobcardService = JobcardService();
 
   final Color primaryColor = const Color(0xFF2E7BA6);
   final Color secondaryColor = const Color(0xFFFF5733);
 
   int currentIndex = 0;
+  late Future<List<JobCard>> _jobsFuture;
 
   final iconList = [
-    Icons.assignment_add,
-    Icons.build_circle,
-    Icons.handyman,
     Icons.bar_chart_rounded,
     Icons.settings,
   ];
@@ -34,6 +33,13 @@ class _HomeScreenState extends State<HomeScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _jobsFuture = _jobcardService.fetchJobs();
+  }
+
+  void _reloadJobs() {
+    setState(() {
+      _jobsFuture = _jobcardService.fetchJobs();
+    });
   }
 
   @override
@@ -41,15 +47,8 @@ class _HomeScreenState extends State<HomeScreen>
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
-        // backgroundColor: primaryColor,
         elevation: 2,
-        title: const Text(
-          "Digi Auto",
-          // style: TextStyle(
-          //   color: Color(0xFFF8F9FA),
-          //   fontWeight: FontWeight.w600,
-          // ),
-        ),
+        title: const Text("Digi Auto"),
         centerTitle: true,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(60),
@@ -73,88 +72,93 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ),
       ),
+      body: FutureBuilder<List<JobCard>>(
+        future: _jobsFuture,
+        builder: (context, snapshot) {
+          final jobs = snapshot.data ?? const <JobCard>[];
 
-      // Tabs below app bar
-      body: Column(
-        children: [
-          Container(
-            color: Colors.white,
-            child: TabBar(
-              controller: _tabController,
-              indicatorColor: primaryColor,
-              labelColor: primaryColor,
-              unselectedLabelColor: Colors.grey,
-              tabs: const [
-                Tab(text: "Active"),
-                Tab(text: "Pending"),
-                Tab(text: "Completed"),
-              ],
-            ),
-          ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildJobList("active"),
-                _buildJobList("pending"),
-                _buildJobList("completed"),
-              ],
-            ),
-          ),
-        ],
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return _buildStateCard(
+              title: "Could not load jobs",
+              subtitle: "Check the Django API connection and try again.",
+            );
+          }
+
+          return Column(
+            children: [
+              Container(
+                color: Colors.white,
+                child: TabBar(
+                  controller: _tabController,
+                  indicatorColor: primaryColor,
+                  labelColor: primaryColor,
+                  unselectedLabelColor: Colors.grey,
+                  tabs: const [
+                    Tab(text: "Active"),
+                    Tab(text: "Pending"),
+                    Tab(text: "Completed"),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    _buildJobList("active", jobs),
+                    _buildJobList("pending", jobs),
+                    _buildJobList("completed", jobs),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
       ),
-
-      // bottomNavigationBar: BottomNavigationBar(
-      //   backgroundColor: secondaryColor.withOpacity(0.95),
-      //   selectedItemColor: Colors.white,
-      //   unselectedItemColor: Colors.white70,
-      //   type: BottomNavigationBarType.fixed,
-      //   items: const [
-      //     BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-      //     BottomNavigationBarItem(icon: Icon(Icons.build), label: "Create Job"),
-      //     BottomNavigationBarItem(icon: Icon(Icons.settings), label: "Spares"),
-      //     BottomNavigationBarItem(
-      //       icon: Icon(Icons.bar_chart),
-      //       label: "Reports",
-      //     ),
-      //     BottomNavigationBarItem(icon: Icon(Icons.person), label: "Settings"),
-      //   ],
-      // ),
       bottomNavigationBar: animatedBottomNavigation(),
+      floatingActionButton: FutureBuilder<List<JobCard>>(
+        future: _jobsFuture,
+        builder: (context, snapshot) {
+          return AssistantButton(
+            hasExistingJobs: (snapshot.data ?? const <JobCard>[]).isNotEmpty,
+            onJobCreated: _reloadJobs,
+          );
+        },
+      ),
     );
   }
 
-  // --- Job List Builder ---
-  Widget _buildJobList(String status) {
-    final jobs = [
-      {
-        "vehicle": "KL 11 AB 2345",
-        "customer": "John Smith",
-        "date": "2025-11-05 09:45 AM",
-        "cost": "₹ 2,350",
-        "status": status == "completed" ? "delivered" : status,
-      },
-      {
-        "vehicle": "KL 07 BC 5678",
-        "customer": "David Mathew",
-        "date": "2025-11-05 11:00 AM",
-        "cost": "₹ 1,120",
-        "status": status,
-      },
-    ];
+  Widget _buildJobList(String status, List<JobCard> jobs) {
+    final filteredJobs = jobs.where((job) {
+      final normalized = job.status.toLowerCase();
+      if (status == "completed") {
+        return normalized == "completed" || normalized == "delivered";
+      }
+      return normalized == status;
+    }).toList();
+
+    if (filteredJobs.isEmpty) {
+      return _buildStateCard(
+        title: "No $status jobs yet",
+        subtitle: "Jobs from the Django API will appear here.",
+      );
+    }
 
     return ListView.builder(
       padding: const EdgeInsets.all(10),
-      itemCount: jobs.length,
+      itemCount: filteredJobs.length,
       itemBuilder: (context, index) {
-        final job = jobs[index];
-        final color = _getBorderColor(job["status"]!);
+        final job = filteredJobs[index];
+        final color = _getBorderColor(job.status.toLowerCase());
 
         return InkWell(
           onTap: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => JobDetailsPage()),
+              MaterialPageRoute(builder: (_) => JobDetailsPage(job: job)),
             );
           },
           child: Container(
@@ -173,7 +177,6 @@ class _HomeScreenState extends State<HomeScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Colored border top
                 Container(
                   height: 5,
                   decoration: BoxDecoration(
@@ -185,31 +188,37 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.all(12.0),
+                  padding: const EdgeInsets.all(12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            job["vehicle"]!,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                          Expanded(
+                            child: Text(
+                              job.vehicleNumber.isEmpty
+                                  ? "Vehicle pending"
+                                  : job.vehicleNumber,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                          _getStatusIcon(job["status"]!),
+                          _getStatusIcon(job.status.toLowerCase()),
                         ],
                       ),
                       const SizedBox(height: 6),
-                      Text("Customer: ${job["customer"]}"),
-                      Text("Date: ${job["date"]}"),
+                      Text(
+                        "Customer: ${job.customerName.isEmpty ? '-' : job.customerName}",
+                      ),
+                      Text("Date: ${job.createdAt}"),
                       const SizedBox(height: 8),
                       Align(
                         alignment: Alignment.bottomRight,
                         child: Text(
-                          "Total: ${job["cost"]}",
+                          "Total: ${job.total}",
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
                             color: primaryColor,
@@ -227,12 +236,51 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  // --- Helpers ---
+  Widget _buildStateCard({
+    required String title,
+    required String subtitle,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.directions_car_outlined, size: 40, color: primaryColor),
+              const SizedBox(height: 12),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.black54),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Color _getBorderColor(String status) {
     switch (status) {
       case "pending":
         return Colors.redAccent;
       case "active":
+      case "in progress":
         return primaryColor;
       case "completed":
       case "delivered":
@@ -247,6 +295,7 @@ class _HomeScreenState extends State<HomeScreen>
       case "pending":
         return const Icon(Icons.access_time, color: Colors.redAccent);
       case "active":
+      case "in progress":
         return Icon(Icons.build_circle, color: primaryColor);
       case "completed":
         return const Icon(Icons.check_circle, color: Colors.blue);
@@ -270,8 +319,8 @@ class _HomeScreenState extends State<HomeScreen>
     }
   }
 
-  animatedBottomNavigation() {
-    final labels = ["Create Job", "Spares", "Labours", "Reports", "Settings"];
+  Widget animatedBottomNavigation() {
+    const labels = ["Reports", "Settings"];
 
     return AnimatedBottomNavigationBar.builder(
       itemCount: iconList.length,
@@ -296,35 +345,10 @@ class _HomeScreenState extends State<HomeScreen>
       onTap: (index) {
         setState(() => currentIndex = index);
         if (index == 0) {
-          // means crate job
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => JobCardFormScreen()),
-          );
-        } else if (index == 1) {
-          // spares
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => SpareForm()),
-          );
-        } else if (index == 2) {
-          // labours
-          showModalBottomSheet(
-            context: context,
-            isScrollControlled: true,
-            shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            builder: (_) => const LabourFormSheet(),
-          );
-        } else if (index == 3) {
-          // reports
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => ReportScreen()),
           );
-        } else {
-          // settings
         }
       },
       backgroundColor: secondaryColor.withOpacity(0.95),
