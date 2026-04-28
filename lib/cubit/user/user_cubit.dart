@@ -7,15 +7,15 @@ class UserCubit extends Cubit<UserState> {
   UserCubit(this.authService) : super(UserState());
 
   void nameChanged(String value) {
-    state.copyWith(name: value);
+    emit(state.copyWith(name: value));
   }
 
   void mobileChanged(String value) {
-    state.copyWith(mobile: value);
+    emit(state.copyWith(mobile: value));
   }
 
   void pinChanged(String value) {
-    state.copyWith(pin: value);
+    emit(state.copyWith(pin: value));
   }
 
   Future<void> registerUser({required String role}) async {

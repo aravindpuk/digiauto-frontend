@@ -32,7 +32,7 @@ class AuthService {
   }) async {
     // Simulate a network call
     final response = await http.post(
-      Uri.parse(baseUrl + ApiEndpoints.registeruser),
+      Uri.parse(baseUrl + ApiEndpoints.registerUser),
       headers: {
         "Content-Type": "application/json",
         "Accept": "application/json",
@@ -47,6 +47,4 @@ class AuthService {
 
     return {'status': response.statusCode, 'body': jsonDecode(response.body)};
   }
-
-  
 }

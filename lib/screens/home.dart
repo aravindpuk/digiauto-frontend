@@ -3,6 +3,7 @@ import 'package:digiauto/custom_widgets/assistant_button.dart';
 import 'package:digiauto/models/job_card.dart';
 import 'package:digiauto/screens/job_details.dart';
 import 'package:digiauto/screens/reports.dart';
+import 'package:digiauto/screens/spare.dart';
 import 'package:digiauto/services/jobcard_service.dart';
 import 'package:flutter/material.dart';
 
@@ -25,6 +26,7 @@ class _HomeScreenState extends State<HomeScreen>
   late Future<List<JobCard>> _jobsFuture;
 
   final iconList = [
+    Icons.build_circle,
     Icons.bar_chart_rounded,
     Icons.settings,
   ];
@@ -143,7 +145,7 @@ class _HomeScreenState extends State<HomeScreen>
     if (filteredJobs.isEmpty) {
       return _buildStateCard(
         title: "No $status jobs yet",
-        subtitle: "Jobs from the Django API will appear here.",
+        subtitle: " Active Jobs will appear here.",
       );
     }
 
@@ -236,10 +238,7 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  Widget _buildStateCard({
-    required String title,
-    required String subtitle,
-  }) {
+  Widget _buildStateCard({required String title, required String subtitle}) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -253,7 +252,11 @@ class _HomeScreenState extends State<HomeScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.directions_car_outlined, size: 40, color: primaryColor),
+              Icon(
+                Icons.directions_car_outlined,
+                size: 40,
+                color: primaryColor,
+              ),
               const SizedBox(height: 12),
               Text(
                 title,
@@ -320,7 +323,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget animatedBottomNavigation() {
-    const labels = ["Reports", "Settings"];
+    const labels = ["Spares", "Reports", "Settings"];
 
     return AnimatedBottomNavigationBar.builder(
       itemCount: iconList.length,
@@ -347,8 +350,17 @@ class _HomeScreenState extends State<HomeScreen>
         if (index == 0) {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => ReportScreen()),
+            MaterialPageRoute(builder: (_) => SpareForm()),
           );
+        }
+        if (index == 1) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ReportScreen()),
+          );
+        }
+        if (index == 2) {
+          // Handle settings navigation
         }
       },
       backgroundColor: secondaryColor.withOpacity(0.95),

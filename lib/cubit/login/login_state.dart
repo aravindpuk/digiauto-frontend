@@ -12,15 +12,13 @@ class LoginState {
   });
 
   LoginState copyWith({String? mobile, String? pin, bool? isLoading}) {
-    final newMobile = mobile ?? this.mobile;
-    final newPin = pin ?? this.pin;
-
+    final m = mobile ?? this.mobile;
+    final p = pin    ?? this.pin;
     return LoginState(
-      mobile: newMobile,
-      pin: newPin,
-      isValid:
-          newMobile.isNotEmpty && newMobile.length > 6 && newPin.length == 4,
+      mobile:    m,
+      pin:       p,
       isLoading: isLoading ?? this.isLoading,
+      isValid:   m.trim().length >= 6 && p.length == 4,
     );
   }
 }
@@ -30,12 +28,13 @@ class LoginInitial extends LoginState {}
 class LoginSuccess extends LoginState {
   final String message;
   final int? garageId;
-  LoginSuccess(this.message, this.garageId);
+  final int? branchId;
+  LoginSuccess(this.message, this.garageId, this.branchId) : super();
 }
 
 class LoginFailure extends LoginState {
   final String message;
-  LoginFailure(this.message);
+  LoginFailure(this.message) : super();
 }
 
 class Authenticated extends LoginState {}

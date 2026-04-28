@@ -2,10 +2,7 @@ import 'package:digiauto/models/job_card.dart';
 import 'package:flutter/material.dart';
 
 class JobDetailsPage extends StatelessWidget {
-  const JobDetailsPage({
-    super.key,
-    required this.job,
-  });
+  const JobDetailsPage({super.key, required this.job});
 
   final JobCard job;
 
@@ -28,7 +25,7 @@ class JobDetailsPage extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "Job ID: ${job.id.isEmpty ? '-' : job.id}",
+                      "Job ID: DIGI-J00${job.id.isEmpty ? '-' : job.id}",
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
@@ -60,30 +57,28 @@ class JobDetailsPage extends StatelessWidget {
           _section(
             title: "Customer Details",
             lines: [
-              "Name: ${job.customerName.isEmpty ? '-' : job.customerName}",
+              "Name: ${job.customerName.isEmpty ? '-' : job.customerName.toUpperCase()}",
               "Mobile: ${job.mobile.isEmpty ? '-' : job.mobile}",
-              "Place: ${job.place.isEmpty ? '-' : job.place}",
+              "Place: ${job.place.isEmpty ? '-' : job.place.toUpperCase()}",
             ],
           ),
           const SizedBox(height: 10),
           _section(
             title: "Vehicle Details",
             lines: [
-              "Vehicle No: ${job.vehicleNumber.isEmpty ? '-' : job.vehicleNumber}",
-              "Model: ${job.vehicleModel.isEmpty ? '-' : job.vehicleModel}",
-              "Make: ${job.vehicleMake.isEmpty ? '-' : job.vehicleMake}",
-              "Year: ${job.year.isEmpty ? '-' : job.year}",
-              "Chassis: ${job.chassisNumber.isEmpty ? '-' : job.chassisNumber}",
-              "Engine: ${job.engineNumber.isEmpty ? '-' : job.engineNumber}",
+              "Vehicle No: ${job.vehicleNumber.isEmpty ? '-' : job.vehicleNumber.toUpperCase()}",
+              "Model: ${job.vehicleModel.isEmpty ? '-' : job.vehicleModel.toUpperCase()}",
+              "Make: ${job.vehicleMake.isEmpty ? '-' : job.vehicleMake.toUpperCase()}",
+              "Year: ${job.year.isEmpty ? '-' : job.year.toUpperCase()}",
+              "Chassis: ${job.chassisNumber.isEmpty ? '-' : job.chassisNumber.toUpperCase()}",
+              "Engine: ${job.engineNumber.isEmpty ? '-' : job.engineNumber.toUpperCase()}",
               "Kilometer: ${job.kilometer.isEmpty ? '-' : job.kilometer}",
             ],
           ),
           const SizedBox(height: 10),
           _section(
             title: "Billing Summary",
-            lines: [
-              "Grand Total: ${job.total}",
-            ],
+            lines: ["Grand Total: ${job.total}"],
           ),
           const SizedBox(height: 10),
           Container(
@@ -127,7 +122,8 @@ class JobDetailsPage extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: _box(),
-      child: child ??
+      child:
+          child ??
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -141,10 +137,12 @@ class JobDetailsPage extends StatelessWidget {
                   ),
                 ),
               if (title != null) const SizedBox(height: 8),
-              ...lines.map((line) => Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(line),
-                  )),
+              ...lines.map(
+                (line) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(line),
+                ),
+              ),
             ],
           ),
     );

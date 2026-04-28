@@ -5,54 +5,49 @@ import 'login_state.dart';
 
 class LoginCubit extends Cubit<LoginState> {
   final AuthService authService;
-
   LoginCubit(this.authService) : super(LoginInitial());
 
-  void mobileChanged(String value) {
-    state.copyWith(mobile: value);
-  }
-
-  void pinChanged(String value) {
-    state.copyWith(pin: value);
-    print(state.pin.length);
-    if (state.pin.length == 4) {
-      print(state.isValid);
-    }
-  }
+  void mobileChanged(String value) => emit(state.copyWith(mobile: value));
+  void pinChanged(String value)    => emit(state.copyWith(pin: value));
 
   Future<void> login() async {
+    if (!state.isValid) return;
     try {
       emit(state.copyWith(isLoading: true));
       final result = await authService.login(
         mobile: state.mobile,
         pin: state.pin,
       );
-      // print(result);
 
       if (result['status'] == 200) {
-        await saveToken(result['body']['token']);
-        emit(
-          LoginSuccess(result['body']['message'], result['body']['garage_id']),
-        );
+        final body = result['body'] as Map<String, dynamic>;
+        await saveToken(body['token'] as String);
+
+        int? garageId = _parseInt(body['garage_id']);
+        int? branchId = _parseInt(body['branch_id']);
+
+        if (garageId != null) await saveGarageId(garageId);
+        if (branchId != null) await saveBranchId(branchId);
+
+        emit(LoginSuccess(body['message'] as String, garageId, branchId));
       } else {
         emit(state.copyWith(isLoading: false));
-        emit(LoginFailure(result['body']['message'] ?? 'Invalid credentials'));
+        emit(LoginFailure(
+            result['body']['message'] as String? ?? 'Invalid credentials'));
       }
-    } catch (e) {
+    } catch (_) {
       emit(state.copyWith(isLoading: false));
-      emit(LoginFailure('Something went wrong'));
+      emit(LoginFailure('Something went wrong. Please try again.'));
     }
   }
 
-  Future<void> isUserLogedIn() async {
+  Future<void> isUserLoggedIn() async {
     try {
       final token = await getToken();
-      // print(token);
-      if (token!.isNotEmpty) {
-        emit(Authenticated());
-      }
-    } catch (e) {
-      print(e);
-    }
+      if (token != null && token.isNotEmpty) emit(Authenticated());
+    } catch (_) {}
   }
+
+  int? _parseInt(dynamic v) =>
+      v == null ? null : (v is int ? v : int.tryParse(v.toString()));
 }

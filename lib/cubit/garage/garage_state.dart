@@ -6,6 +6,7 @@ class GarageState {
   final double? longitude;
   final bool isValid;
   final bool isLoading;
+
   GarageState({
     this.garage = '',
     this.mobile = '',
@@ -22,29 +23,26 @@ class GarageState {
     String? email,
     double? latitude,
     double? longitude,
-    bool? isValid,
     bool? isLoading,
   }) {
-    final updatedGarage = garage ?? this.garage;
-    final updatedMobile = mobile ?? this.mobile;
-    final updatedEmail = email ?? this.email;
-    final updatedLat = latitude ?? this.latitude;
-    final updatedLong = longitude ?? this.longitude;
+    final newGarage = garage ?? this.garage;
+    final newMobile = mobile ?? this.mobile;
+    final newLat = latitude ?? this.latitude;
+    final newLng = longitude ?? this.longitude;
 
     return GarageState(
-      garage: updatedGarage,
-      mobile: updatedMobile,
-      email: updatedEmail,
-      latitude: updatedLat,
-      longitude: updatedLong,
-
-      isValid:
-          updatedGarage.length > 3 &&
-          updatedMobile.length > 6 &&
-          updatedLat != null &&
-          updatedLong != null,
-
+      garage: newGarage,
+      mobile: newMobile,
+      email: email ?? this.email,
+      latitude: newLat,
+      longitude: newLng,
       isLoading: isLoading ?? this.isLoading,
+      // recomputed every time
+      isValid:
+          newGarage.trim().length > 3 &&
+          newMobile.trim().length >= 6 &&
+          newLat != null &&
+          newLng != null,
     );
   }
 }
@@ -53,10 +51,10 @@ class GarageInitialState extends GarageState {}
 
 class GarageSuccessState extends GarageState {
   final String message;
-  GarageSuccessState(this.message);
+  GarageSuccessState(this.message) : super();
 }
 
 class GarageFailureState extends GarageState {
   final String message;
-  GarageFailureState(this.message);
+  GarageFailureState(this.message) : super();
 }

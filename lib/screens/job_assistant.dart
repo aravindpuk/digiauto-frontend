@@ -1,16 +1,14 @@
 import 'package:digiauto/cubit/job_assistant/assistant_cubit.dart';
+import 'package:digiauto/cubit/manage_job/manage_job_cubit.dart';
 import 'package:digiauto/models/chat.dart';
 import 'package:digiauto/services/jobcard_service.dart';
 import 'package:digiauto/services/speech_text.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 class JobAssistantScreen extends StatefulWidget {
-  const JobAssistantScreen({
-    super.key,
-    required this.hasExistingJobs,
-  });
-
+  const JobAssistantScreen({super.key, required this.hasExistingJobs});
   final bool hasExistingJobs;
 
   @override
@@ -20,7 +18,7 @@ class JobAssistantScreen extends StatefulWidget {
 class _JobAssistantScreenState extends State<JobAssistantScreen> {
   final TextEditingController _ctrl = TextEditingController();
   final VoiceService voiceService = VoiceService();
-  final ScrollController _scrollController = ScrollController();
+  final ScrollController _scroll = ScrollController();
   late final JobAssistantCubit _cubit;
 
   @override
@@ -35,46 +33,42 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
   @override
   void dispose() {
     _ctrl.dispose();
-    _scrollController.dispose();
+    _scroll.dispose();
     _cubit.close();
     super.dispose();
   }
 
-  void _send(JobAssistantCubit cubit) {
-    if (_ctrl.text.trim().isEmpty) return;
-    cubit.handleInput(_ctrl.text);
-    _ctrl.clear();
-    _scrollToBottom();
-  }
-
-  void _addService(JobAssistantCubit cubit) {
-    if (_ctrl.text.trim().isEmpty) return;
-    cubit.addService(_ctrl.text, fromUserInput: true);
+  void _send() {
+    final text = _ctrl.text.trim();
+    if (text.isEmpty) return;
+    if (_cubit.isCollectingServices || _cubit.isEditingServices) {
+      _cubit.addService(text, fromUserInput: true);
+    } else {
+      _cubit.handleInput(text);
+    }
     _ctrl.clear();
     _scrollToBottom();
   }
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
+      if (!_scroll.hasClients) return;
+      _scroll.animateTo(
+        _scroll.position.maxScrollExtent,
         duration: const Duration(milliseconds: 250),
         curve: Curves.easeOut,
       );
     });
   }
 
-  void onMic() async {
+  void _onMic() async {
     if (voiceService.isListening) {
       voiceService.stopListening();
     } else {
       await voiceService.init();
-      await voiceService.startListening((text) {
-        setState(() {
-          _ctrl.text += " $text";
-        });
-      });
+      await voiceService.startListening(
+        (t) => setState(() => _ctrl.text += " $t"),
+      );
     }
     setState(() {});
   }
@@ -84,15 +78,15 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
     return BlocProvider.value(
       value: _cubit,
       child: Builder(
-        builder: (context) {
-          final theme = Theme.of(context);
+        builder: (ctx) {
+          final theme = Theme.of(ctx);
           return Scaffold(
             appBar: AppBar(
               title: const Text("Digi Assistant"),
               actions: [
                 IconButton(
                   tooltip: "Restart",
-                  onPressed: () => context.read<JobAssistantCubit>().reset(),
+                  onPressed: () => ctx.read<JobAssistantCubit>().reset(),
                   icon: const Icon(Icons.refresh_rounded),
                 ),
               ],
@@ -107,66 +101,37 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
               ),
               child: Column(
                 children: [
-                  Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.92),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 22,
-                          backgroundColor: theme.primaryColor.withOpacity(0.12),
-                          child: Icon(
-                            Icons.directions_car_filled_outlined,
-                            color: theme.primaryColor,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                              child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "Digi Assistant",
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              SizedBox(height: 4),
-                              Text(
-                                "Create a new jobcard by chat, or jump into job management from the assistant.",
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _headerCard(theme),
                   Expanded(
                     child: BlocConsumer<JobAssistantCubit, List<ChatMessage>>(
-                      listener: (context, _) {
+                      listener: (ctx, _) {
                         _scrollToBottom();
-                        if (context.read<JobAssistantCubit>().isCompleted &&
-                            Navigator.of(context).canPop()) {
+                        final c = ctx.read<JobAssistantCubit>();
+                        if (c.isCompleted && Navigator.of(ctx).canPop()) {
                           WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted) {
-                              Navigator.of(context).pop(true);
-                            }
+                            if (mounted) Navigator.of(ctx).pop(true);
+                          });
+                        }
+                        // manage done — pop
+                        if (c.isManaging &&
+                            c.manageCubit?.manageStep == ManageStep.done &&
+                            Navigator.of(ctx).canPop()) {
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) Navigator.of(ctx).pop(true);
                           });
                         }
                       },
-                      builder: (context, messages) {
-                        final cubit = context.read<JobAssistantCubit>();
+                      builder: (ctx, messages) {
+                        final cubit = ctx.read<JobAssistantCubit>();
+                        final isServiceMode =
+                            cubit.isCollectingServices ||
+                            cubit.isEditingServices;
+
                         return Column(
                           children: [
                             Expanded(
                               child: ListView.builder(
-                                controller: _scrollController,
+                                controller: _scroll,
                                 padding: const EdgeInsets.fromLTRB(
                                   12,
                                   4,
@@ -174,53 +139,18 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
                                   12,
                                 ),
                                 itemCount: messages.length,
-                                itemBuilder: (_, i) => _messageTile(
-                                  context,
-                                  messages[i],
-                                  cubit,
-                                ),
+                                itemBuilder: (_, i) =>
+                                    _messageTile(ctx, messages[i], cubit),
                               ),
                             ),
-                            if (cubit.isCollectingServices &&
-                                cubit.services.isNotEmpty)
-                              Container(
-                                width: double.infinity,
-                                margin: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                ),
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                                child: SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  child: Row(
-                                    children: [
-                                      ...cubit.services.map(
-                                        (service) => Padding(
-                                          padding: const EdgeInsets.only(
-                                            right: 8,
-                                          ),
-                                          child: InputChip(
-                                            label: Text(service),
-                                            onDeleted: () {
-                                              cubit.removeService(service);
-                                              _scrollToBottom();
-                                            },
-                                          ),
-                                        ),
-                                      ),
-                                      FilledButton.tonalIcon(
-                                        onPressed: cubit.finishServices,
-                                        icon: const Icon(Icons.check_rounded),
-                                        label: const Text("Done"),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            if (cubit.canShowInput) _inputArea(context, cubit),
+
+                            // Service chips
+                            if (isServiceMode && cubit.services.isNotEmpty)
+                              _serviceChips(cubit),
+
+                            // Input bar — only when relevant
+                            if (cubit.canShowInput)
+                              _inputArea(ctx, cubit, isServiceMode),
                           ],
                         );
                       },
@@ -235,6 +165,46 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
     );
   }
 
+  // ─── Header ────────────────────────────────────────────────────────────────
+
+  Widget _headerCard(ThemeData theme) => Container(
+    width: double.infinity,
+    margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white.withOpacity(0.92),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Row(
+      children: [
+        CircleAvatar(
+          radius: 22,
+          backgroundColor: theme.primaryColor.withOpacity(0.12),
+          child: Icon(
+            Icons.directions_car_filled_outlined,
+            color: theme.primaryColor,
+          ),
+        ),
+        const SizedBox(width: 12),
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Digi Assistant",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+              SizedBox(height: 4),
+              Text("Create a new jobcard or manage existing jobs."),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
+  // ─── Message tile ──────────────────────────────────────────────────────────
+
   Widget _messageTile(
     BuildContext context,
     ChatMessage msg,
@@ -248,6 +218,16 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
         ? theme.primaryColor
         : Colors.white;
 
+    final msgStep = msg.step ?? 0;
+    final showEdit =
+        isUser &&
+        msgStep >= JobAssistantCubit.vehicleStep &&
+        msgStep <= JobAssistantCubit.serviceStep &&
+        cubit.step > msgStep &&
+        cubit.editingStep == null &&
+        !cubit.isSubmitting &&
+        !cubit.isManaging;
+
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Column(
@@ -255,11 +235,12 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
             ? CrossAxisAlignment.end
             : CrossAxisAlignment.start,
         children: [
+          // Bubble
           Container(
             constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.8,
+              maxWidth: MediaQuery.of(context).size.width * 0.82,
             ),
-            margin: const EdgeInsets.symmetric(vertical: 6),
+            margin: const EdgeInsets.symmetric(vertical: 5),
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: bubbleColor,
@@ -267,44 +248,37 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withOpacity(0.05),
-                  blurRadius: 12,
-                  offset: const Offset(0, 6),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
                 ),
               ],
             ),
             child: Text(
               msg.text,
               style: TextStyle(
-                height: 1.4,
+                height: 1.45,
                 color: isUser || msg.isSummary ? Colors.white : Colors.black87,
               ),
             ),
           ),
-          if (isUser &&
-              (msg.step ?? 0) >= 1 &&
-              (msg.step ?? 0) <= JobAssistantCubit.serviceStep &&
-              cubit.step >= JobAssistantCubit.reviewStep)
+
+          // Edit button (create flow)
+          if (showEdit)
             TextButton.icon(
-              onPressed: () => cubit.editStep(msg.step ?? 1),
-              icon: const Icon(Icons.edit_outlined, size: 16),
+              onPressed: () => cubit.editStep(msgStep),
+              icon: const Icon(Icons.edit_outlined, size: 15),
               label: const Text("Edit"),
             ),
+
+          // Option chips
           if (msg.options?.isNotEmpty ?? false)
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: msg.options!
-                  .map(
-                    (option) => ActionChip(
-                      label: Text(option),
-                      onPressed: () {
-                        cubit.selectOption(option);
-                        _scrollToBottom();
-                      },
-                    ),
-                  )
-                  .toList(),
-            ),
+            _optionChips(context, msg.options!, cubit),
+
+          // Labour list with delete buttons (manage mode)
+          if (msg.labourList?.isNotEmpty ?? false)
+            _labourRemoveList(context, msg.labourList!, cubit),
+
+          // Skip
           if (msg.showSkip)
             TextButton(
               onPressed: cubit.skip,
@@ -315,8 +289,179 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
     );
   }
 
-  Widget _inputArea(BuildContext context, JobAssistantCubit cubit) {
+  // ─── Option chips ──────────────────────────────────────────────────────────
+
+  Widget _optionChips(
+    BuildContext context,
+    List<String> options,
+    JobAssistantCubit cubit,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4, bottom: 4),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: options
+            .map(
+              (o) => ActionChip(
+                label: Text(o),
+                backgroundColor: Theme.of(
+                  context,
+                ).primaryColor.withOpacity(0.08),
+                onPressed: () {
+                  if (cubit.isManaging) {
+                    cubit.handleManageOption(o);
+                  } else {
+                    cubit.selectOption(o);
+                  }
+                  _scrollToBottom();
+                },
+              ),
+            )
+            .toList(),
+      ),
+    );
+  }
+
+  // ─── Labour remove list ────────────────────────────────────────────────────
+
+  Widget _labourRemoveList(
+    BuildContext context,
+    List<Map<String, dynamic>> labours,
+    JobAssistantCubit cubit,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: labours.map((l) {
+        return Container(
+          margin: const EdgeInsets.only(top: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l['labour_name'].toString(),
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    Text(
+                      "₹${l['amount'] ?? '-'}",
+                      style: const TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                tooltip: "Remove",
+                onPressed: () => _confirmRemoveLabour(
+                  context,
+                  cubit,
+                  l['id'] as int,
+                  l['labour_name'].toString(),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  void _confirmRemoveLabour(
+    BuildContext context,
+    JobAssistantCubit cubit,
+    int id,
+    String name,
+  ) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Remove Labour"),
+        content: Text('Remove "$name" from this job card?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              Navigator.pop(context);
+              cubit.manageCubit?.removeLabour(id, name);
+            },
+            child: const Text("Remove", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Service chips ─────────────────────────────────────────────────────────
+
+  Widget _serviceChips(JobAssistantCubit cubit) => Container(
+    width: double.infinity,
+    margin: const EdgeInsets.symmetric(horizontal: 12),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(18),
+    ),
+    child: SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          ...cubit.services.map(
+            (s) => Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: InputChip(
+                label: Text(s),
+                onDeleted: () {
+                  cubit.removeService(s);
+                  _scrollToBottom();
+                },
+              ),
+            ),
+          ),
+          FilledButton.tonalIcon(
+            onPressed: cubit.finishServices,
+            icon: const Icon(Icons.check_rounded),
+            label: const Text("Done"),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  // ─── Input area ────────────────────────────────────────────────────────────
+
+  Widget _inputArea(
+    BuildContext context,
+    JobAssistantCubit cubit,
+    bool isServiceMode,
+  ) {
     final theme = Theme.of(context);
+    final keyboardType = isServiceMode
+        ? TextInputType.text
+        : cubit.isNumericInput
+        ? TextInputType.number
+        : TextInputType.text;
+    final formatters = cubit.isNumericInput
+        ? [FilteringTextInputFormatter.digitsOnly]
+        : <TextInputFormatter>[];
 
     return SafeArea(
       top: false,
@@ -338,11 +483,10 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
               child: TextField(
                 controller: _ctrl,
                 enabled: !cubit.isSubmitting,
-                textInputAction: cubit.isCollectingServices
-                    ? TextInputAction.done
-                    : TextInputAction.send,
-                onSubmitted: (_) =>
-                    cubit.isCollectingServices ? _addService(cubit) : _send(cubit),
+                keyboardType: keyboardType,
+                inputFormatters: formatters,
+                textInputAction: TextInputAction.send,
+                onSubmitted: (_) => _send(),
                 decoration: InputDecoration(
                   hintText: voiceService.isListening
                       ? "Listening..."
@@ -362,22 +506,17 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
                 voiceService.isListening ? Icons.mic : Icons.mic_none_rounded,
                 color: voiceService.isListening ? Colors.red : Colors.grey,
               ),
-              onPressed: onMic,
+              onPressed: _onMic,
             ),
-            if (cubit.isCollectingServices)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: FilledButton(
-                  onPressed: () => _addService(cubit),
-                  child: const Text("Add"),
-                ),
-              ),
             CircleAvatar(
               backgroundColor: theme.colorScheme.secondary,
               child: IconButton(
-                icon: const Icon(Icons.send_rounded, color: Colors.white),
-                onPressed: () =>
-                    cubit.isCollectingServices ? _addService(cubit) : _send(cubit),
+                tooltip: isServiceMode ? "Add service" : "Send",
+                icon: Icon(
+                  isServiceMode ? Icons.add : Icons.send_rounded,
+                  color: Colors.white,
+                ),
+                onPressed: _send,
               ),
             ),
           ],

@@ -22,7 +22,7 @@ class RoleSelectionState extends State<RoleSelectionScreen> {
   void initState() {
     super.initState();
 
-    context.read<LoginCubit>().isUserLogedIn();
+    context.read<LoginCubit>().isUserLoggedIn();
   }
 
   @override

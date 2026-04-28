@@ -16,11 +16,24 @@ class JobcardService {
     };
   }
 
+  // ─── Fetch Jobs ───────────────────────────────────────────────────────────
+
   Future<List<JobCard>> fetchJobs() async {
-    final response = await http.get(
-      Uri.parse(baseUrl + ApiEndpoints.jobCards),
-      headers: await _headers(),
-    );
+    final garageId = await getGarageId();
+    final branchId = await getBranchId();
+
+    // Build query params — prefer branch_id for precise filtering
+    final params = <String, String>{};
+    if (branchId != null) {
+      params['branch_id'] = branchId.toString();
+    } else if (garageId != null) {
+      params['garage_id'] = garageId.toString();
+    }
+
+    final uri = Uri.parse(baseUrl + ApiEndpoints.jobCards)
+        .replace(queryParameters: params.isNotEmpty ? params : null);
+
+    final response = await http.get(uri, headers: await _headers());
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('Failed to fetch jobs (${response.statusCode})');
@@ -30,18 +43,19 @@ class JobcardService {
     final List<dynamic> items = decoded is List
         ? decoded
         : (decoded is Map<String, dynamic>
-              ? (decoded['results'] ??
-                    decoded['data'] ??
-                    decoded['jobs'] ??
-                    decoded['jobcards'] ??
-                    [])
-              : []);
+            ? (decoded['jobcards'] ??
+                decoded['results'] ??
+                decoded['data'] ??
+                [])
+            : []);
 
     return items
         .whereType<Map<String, dynamic>>()
         .map(JobCard.fromJson)
         .toList();
   }
+
+  // ─── Create Job Card ──────────────────────────────────────────────────────
 
   Future<JobCard> createJobCard({
     required String vehicleNumber,
@@ -56,18 +70,26 @@ class JobcardService {
     required String kilometer,
     required List<String> services,
   }) async {
+    final branchId = await getBranchId();
+
+    if (branchId == null) {
+      throw Exception(
+          'No branch found. Please ensure your garage is registered.');
+    }
+
     final body = jsonEncode({
-      'vehicle_number': vehicleNumber,
-      'customer_name': customerName,
-      'mobile': mobile,
-      'place': place,
-      'model': vehicleModel,
-      'make': vehicleMake,
-      'year': year,
-      'chassis_number': chassisNumber,
-      'engine_number': engineNumber,
-      'kilometer': kilometer,
-      'services': services,
+      'branch_id':      branchId,
+      'vehicle_number': vehicleNumber.trim().toUpperCase(),
+      'customer_name':  customerName.trim(),
+      'mobile':         mobile.trim(),
+      'place':          place.trim(),
+      'vehicle_model':  vehicleModel.trim(),
+      'vehicle_make':   vehicleMake.trim(),
+      'year':           year.trim(),
+      'chassis_number': chassisNumber.trim(),
+      'engine_number':  engineNumber.trim(),
+      'kilometer':      int.tryParse(kilometer.trim()) ?? 0,
+      'services':       services,
     });
 
     final response = await http.post(
@@ -77,14 +99,26 @@ class JobcardService {
     );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('Failed to create job card (${response.statusCode})');
+      // Try to extract server error message
+      try {
+        final err = jsonDecode(response.body);
+        throw Exception(
+            err['message'] ?? 'Failed to create job card (${response.statusCode})');
+      } catch (_) {
+        throw Exception('Failed to create job card (${response.statusCode})');
+      }
     }
 
     final decoded = jsonDecode(response.body);
-    if (decoded is Map<String, dynamic>) {
-      return JobCard.fromJson(decoded);
+    final jobcardData = decoded is Map<String, dynamic>
+        ? (decoded['jobcard'] ?? decoded)
+        : decoded;
+
+    if (jobcardData is Map<String, dynamic>) {
+      return JobCard.fromJson(jobcardData);
     }
 
+    // Fallback — shouldn't normally reach here
     return JobCard(
       id: '',
       vehicleNumber: vehicleNumber,
