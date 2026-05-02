@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:digiauto/cubit/job_assistant/assistant_cubit.dart';
 import 'package:digiauto/cubit/manage_job/manage_job_cubit.dart';
 import 'package:digiauto/models/chat.dart';
@@ -20,6 +22,9 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
   final VoiceService voiceService = VoiceService();
   final ScrollController _scroll = ScrollController();
   late final JobAssistantCubit _cubit;
+  Timer? _labourSearchDebounce;
+  List<Map<String, dynamic>> _labourSuggestions = [];
+  bool _allowPop = false;
 
   @override
   void initState() {
@@ -34,6 +39,7 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
   void dispose() {
     _ctrl.dispose();
     _scroll.dispose();
+    _labourSearchDebounce?.cancel();
     _cubit.close();
     super.dispose();
   }
@@ -46,6 +52,7 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
     } else {
       _cubit.handleInput(text);
     }
+    setState(() => _labourSuggestions = []);
     _ctrl.clear();
     _scrollToBottom();
   }
@@ -73,6 +80,12 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
     setState(() {});
   }
 
+  void _closeWithResult(bool changed) {
+    if (!mounted) return;
+    setState(() => _allowPop = true);
+    Navigator.of(context).pop(changed);
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocProvider.value(
@@ -80,83 +93,91 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
       child: Builder(
         builder: (ctx) {
           final theme = Theme.of(ctx);
-          return Scaffold(
-            appBar: AppBar(
-              title: const Text("Digi Assistant"),
-              actions: [
-                IconButton(
-                  tooltip: "Restart",
-                  onPressed: () => ctx.read<JobAssistantCubit>().reset(),
-                  icon: const Icon(Icons.refresh_rounded),
-                ),
-              ],
-            ),
-            body: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Color(0xFFEAF5FB), Color(0xFFF8F9FA)],
-                ),
-              ),
-              child: Column(
-                children: [
-                  _headerCard(theme),
-                  Expanded(
-                    child: BlocConsumer<JobAssistantCubit, List<ChatMessage>>(
-                      listener: (ctx, _) {
-                        _scrollToBottom();
-                        final c = ctx.read<JobAssistantCubit>();
-                        if (c.isCompleted && Navigator.of(ctx).canPop()) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted) Navigator.of(ctx).pop(true);
-                          });
-                        }
-                        // manage done — pop
-                        if (c.isManaging &&
-                            c.manageCubit?.manageStep == ManageStep.done &&
-                            Navigator.of(ctx).canPop()) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted) Navigator.of(ctx).pop(true);
-                          });
-                        }
-                      },
-                      builder: (ctx, messages) {
-                        final cubit = ctx.read<JobAssistantCubit>();
-                        final isServiceMode =
-                            cubit.isCollectingServices ||
-                            cubit.isEditingServices;
-
-                        return Column(
-                          children: [
-                            Expanded(
-                              child: ListView.builder(
-                                controller: _scroll,
-                                padding: const EdgeInsets.fromLTRB(
-                                  12,
-                                  4,
-                                  12,
-                                  12,
-                                ),
-                                itemCount: messages.length,
-                                itemBuilder: (_, i) =>
-                                    _messageTile(ctx, messages[i], cubit),
-                              ),
-                            ),
-
-                            // Service chips
-                            if (isServiceMode && cubit.services.isNotEmpty)
-                              _serviceChips(cubit),
-
-                            // Input bar — only when relevant
-                            if (cubit.canShowInput)
-                              _inputArea(ctx, cubit, isServiceMode),
-                          ],
-                        );
-                      },
-                    ),
+          return PopScope(
+            canPop: _allowPop,
+            onPopInvokedWithResult: (didPop, result) {
+              if (!didPop) {
+                _closeWithResult(_cubit.hasChanges);
+              }
+            },
+            child: Scaffold(
+              appBar: AppBar(
+                title: const Text("Digi Assistant"),
+                actions: [
+                  IconButton(
+                    tooltip: "Restart",
+                    onPressed: () => ctx.read<JobAssistantCubit>().reset(),
+                    icon: const Icon(Icons.refresh_rounded),
                   ),
                 ],
+              ),
+              body: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0xFFEAF5FB), Color(0xFFF8F9FA)],
+                  ),
+                ),
+                child: Column(
+                  children: [
+                    _headerCard(theme),
+                    Expanded(
+                      child: BlocConsumer<JobAssistantCubit, List<ChatMessage>>(
+                        listener: (ctx, _) {
+                          _scrollToBottom();
+                          final c = ctx.read<JobAssistantCubit>();
+                          if (c.isCompleted && Navigator.of(ctx).canPop()) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted) _closeWithResult(true);
+                            });
+                          }
+                          // manage done — pop
+                          if (c.isManaging &&
+                              c.manageCubit?.manageStep == ManageStep.done &&
+                              Navigator.of(ctx).canPop()) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted) _closeWithResult(c.hasChanges);
+                            });
+                          }
+                        },
+                        builder: (ctx, messages) {
+                          final cubit = ctx.read<JobAssistantCubit>();
+                          final isServiceMode =
+                              cubit.isCollectingServices ||
+                              cubit.isEditingServices;
+
+                          return Column(
+                            children: [
+                              Expanded(
+                                child: ListView.builder(
+                                  controller: _scroll,
+                                  padding: const EdgeInsets.fromLTRB(
+                                    12,
+                                    4,
+                                    12,
+                                    12,
+                                  ),
+                                  itemCount: messages.length,
+                                  itemBuilder: (_, i) =>
+                                      _messageTile(ctx, messages[i], cubit),
+                                ),
+                              ),
+
+                              // Service chips
+                              if (isServiceMode && cubit.services.isNotEmpty)
+                                _serviceChips(cubit),
+
+                              // Input bar — only when relevant
+                              if (cubit.canShowInput)
+                                _inputArea(ctx, cubit, isServiceMode),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           );
@@ -172,14 +193,14 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
     margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: Colors.white.withOpacity(0.92),
+      color: Colors.white.withValues(alpha: 0.92),
       borderRadius: BorderRadius.circular(20),
     ),
     child: Row(
       children: [
         CircleAvatar(
           radius: 22,
-          backgroundColor: theme.primaryColor.withOpacity(0.12),
+          backgroundColor: theme.primaryColor.withValues(alpha: 0.12),
           child: Icon(
             Icons.directions_car_filled_outlined,
             color: theme.primaryColor,
@@ -247,7 +268,7 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -307,7 +328,7 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
                 label: Text(o),
                 backgroundColor: Theme.of(
                   context,
-                ).primaryColor.withOpacity(0.08),
+                ).primaryColor.withValues(alpha: 0.08),
                 onPressed: () {
                   if (cubit.isManaging) {
                     cubit.handleManageOption(o);
@@ -341,7 +362,7 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
             borderRadius: BorderRadius.circular(14),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.04),
+                color: Colors.black.withValues(alpha: 0.04),
                 blurRadius: 6,
                 offset: const Offset(0, 2),
               ),
@@ -471,56 +492,129 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 14,
               offset: const Offset(0, -4),
             ),
           ],
         ),
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: TextField(
-                controller: _ctrl,
-                enabled: !cubit.isSubmitting,
-                keyboardType: keyboardType,
-                inputFormatters: formatters,
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _send(),
-                decoration: InputDecoration(
-                  hintText: voiceService.isListening
-                      ? "Listening..."
-                      : cubit.inputHint,
-                  filled: true,
-                  fillColor: const Color(0xFFF4F7FA),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(28),
-                    borderSide: BorderSide.none,
+            if (_labourSuggestions.isNotEmpty && _isLabourSearch(cubit))
+              _labourSuggestionPanel(cubit),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _ctrl,
+                    enabled: !cubit.isSubmitting,
+                    keyboardType: keyboardType,
+                    inputFormatters: formatters,
+                    textInputAction: TextInputAction.send,
+                    onChanged: (value) => _onInputChanged(cubit, value),
+                    onSubmitted: (_) => _send(),
+                    decoration: InputDecoration(
+                      hintText: voiceService.isListening
+                          ? "Listening..."
+                          : cubit.inputHint,
+                      filled: true,
+                      fillColor: const Color(0xFFF4F7FA),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(28),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            IconButton(
-              icon: Icon(
-                voiceService.isListening ? Icons.mic : Icons.mic_none_rounded,
-                color: voiceService.isListening ? Colors.red : Colors.grey,
-              ),
-              onPressed: _onMic,
-            ),
-            CircleAvatar(
-              backgroundColor: theme.colorScheme.secondary,
-              child: IconButton(
-                tooltip: isServiceMode ? "Add service" : "Send",
-                icon: Icon(
-                  isServiceMode ? Icons.add : Icons.send_rounded,
-                  color: Colors.white,
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: Icon(
+                    voiceService.isListening
+                        ? Icons.mic
+                        : Icons.mic_none_rounded,
+                    color: voiceService.isListening ? Colors.red : Colors.grey,
+                  ),
+                  onPressed: _onMic,
                 ),
-                onPressed: _send,
-              ),
+                CircleAvatar(
+                  backgroundColor: theme.colorScheme.secondary,
+                  child: IconButton(
+                    tooltip: isServiceMode ? "Add service" : "Send",
+                    icon: Icon(
+                      isServiceMode ? Icons.add : Icons.send_rounded,
+                      color: Colors.white,
+                    ),
+                    onPressed: _send,
+                  ),
+                ),
+              ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  bool _isLabourSearch(JobAssistantCubit cubit) {
+    return cubit.isManaging &&
+        cubit.manageCubit?.manageStep == ManageStep.addLabourSearch;
+  }
+
+  void _onInputChanged(JobAssistantCubit cubit, String value) {
+    if (!_isLabourSearch(cubit)) {
+      if (_labourSuggestions.isNotEmpty) {
+        setState(() => _labourSuggestions = []);
+      }
+      return;
+    }
+
+    _labourSearchDebounce?.cancel();
+    _labourSearchDebounce = Timer(const Duration(milliseconds: 280), () async {
+      final query = value.trim();
+      if (query.length < 2) {
+        if (mounted) setState(() => _labourSuggestions = []);
+        return;
+      }
+      try {
+        final results =
+            await cubit.manageCubit?.previewLabourSearch(query) ?? [];
+        if (!mounted || _ctrl.text.trim() != query) return;
+        setState(() => _labourSuggestions = results.take(5).toList());
+      } catch (_) {
+        if (mounted) setState(() => _labourSuggestions = []);
+      }
+    });
+  }
+
+  Widget _labourSuggestionPanel(JobAssistantCubit cubit) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE0E8ED)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: _labourSuggestions.map((labour) {
+          final name = labour['name']?.toString() ?? '';
+          final price = labour['suggested_price']?.toString();
+          return ListTile(
+            dense: true,
+            leading: const Icon(Icons.engineering_outlined),
+            title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+            trailing: Text(price == null ? "No price" : "Rs $price"),
+            onTap: () {
+              _labourSearchDebounce?.cancel();
+              _ctrl.clear();
+              setState(() => _labourSuggestions = []);
+              cubit.manageCubit?.selectLabourFromResults(name);
+              _scrollToBottom();
+            },
+          );
+        }).toList(),
       ),
     );
   }

@@ -30,8 +30,9 @@ class JobcardService {
       params['garage_id'] = garageId.toString();
     }
 
-    final uri = Uri.parse(baseUrl + ApiEndpoints.jobCards)
-        .replace(queryParameters: params.isNotEmpty ? params : null);
+    final uri = Uri.parse(
+      baseUrl + ApiEndpoints.jobCards,
+    ).replace(queryParameters: params.isNotEmpty ? params : null);
 
     final response = await http.get(uri, headers: await _headers());
 
@@ -43,16 +44,98 @@ class JobcardService {
     final List<dynamic> items = decoded is List
         ? decoded
         : (decoded is Map<String, dynamic>
-            ? (decoded['jobcards'] ??
-                decoded['results'] ??
-                decoded['data'] ??
-                [])
-            : []);
+              ? (decoded['jobcards'] ??
+                    decoded['results'] ??
+                    decoded['data'] ??
+                    [])
+              : []);
 
     return items
         .whereType<Map<String, dynamic>>()
         .map(JobCard.fromJson)
         .toList();
+  }
+
+  Future<JobCard> fetchJobDetail(String jobcardId) async {
+    final id = int.tryParse(jobcardId);
+    if (id == null) {
+      throw Exception('Invalid job card id');
+    }
+    final uri = Uri.parse(baseUrl + ApiEndpoints.jobCardDetail(id));
+    final response = await http.get(uri, headers: await _headers());
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Failed to fetch job details (${response.statusCode})');
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is Map<String, dynamic>) {
+      final jobcardData = decoded['jobcard'] ?? decoded;
+      if (jobcardData is Map<String, dynamic>) {
+        return JobCard.fromJson(jobcardData);
+      }
+    }
+    throw Exception('Invalid job details response');
+  }
+
+  Future<JobCard> updateJobCard({
+    required String jobcardId,
+    required String vehicleNumber,
+    required String customerName,
+    required String mobile,
+    required String place,
+    required String vehicleModel,
+    required String vehicleMake,
+    required String year,
+    required String chassisNumber,
+    required String engineNumber,
+    required String kilometer,
+    required List<String> services,
+  }) async {
+    final id = int.tryParse(jobcardId);
+    if (id == null) {
+      throw Exception('Invalid job card id');
+    }
+
+    final response = await http.patch(
+      Uri.parse(baseUrl + ApiEndpoints.jobCardDetail(id)),
+      headers: await _headers(),
+      body: jsonEncode({
+        'action': 'edit',
+        'vehicle_number': vehicleNumber.trim().toUpperCase(),
+        'customer_name': customerName.trim(),
+        'mobile': mobile.trim(),
+        'place': place.trim(),
+        'vehicle_model': vehicleModel.trim(),
+        'vehicle_make': vehicleMake.trim(),
+        'year': year.trim(),
+        'chassis_number': chassisNumber.trim(),
+        'engine_number': engineNumber.trim(),
+        'kilometer': int.tryParse(kilometer.trim()) ?? 0,
+        'services': services,
+      }),
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      try {
+        final err = jsonDecode(response.body);
+        throw Exception(
+          err['message'] ??
+              'Failed to update job card (${response.statusCode})',
+        );
+      } catch (_) {
+        throw Exception('Failed to update job card (${response.statusCode})');
+      }
+    }
+
+    final decoded = jsonDecode(response.body);
+    final jobcardData = decoded is Map<String, dynamic>
+        ? (decoded['jobcard'] ?? decoded)
+        : decoded;
+    if (jobcardData is Map<String, dynamic>) {
+      return JobCard.fromJson(jobcardData);
+    }
+    throw Exception('Invalid job update response');
   }
 
   // ─── Create Job Card ──────────────────────────────────────────────────────
@@ -74,22 +157,23 @@ class JobcardService {
 
     if (branchId == null) {
       throw Exception(
-          'No branch found. Please ensure your garage is registered.');
+        'No branch found. Please ensure your garage is registered.',
+      );
     }
 
     final body = jsonEncode({
-      'branch_id':      branchId,
+      'branch_id': branchId,
       'vehicle_number': vehicleNumber.trim().toUpperCase(),
-      'customer_name':  customerName.trim(),
-      'mobile':         mobile.trim(),
-      'place':          place.trim(),
-      'vehicle_model':  vehicleModel.trim(),
-      'vehicle_make':   vehicleMake.trim(),
-      'year':           year.trim(),
+      'customer_name': customerName.trim(),
+      'mobile': mobile.trim(),
+      'place': place.trim(),
+      'vehicle_model': vehicleModel.trim(),
+      'vehicle_make': vehicleMake.trim(),
+      'year': year.trim(),
       'chassis_number': chassisNumber.trim(),
-      'engine_number':  engineNumber.trim(),
-      'kilometer':      int.tryParse(kilometer.trim()) ?? 0,
-      'services':       services,
+      'engine_number': engineNumber.trim(),
+      'kilometer': int.tryParse(kilometer.trim()) ?? 0,
+      'services': services,
     });
 
     final response = await http.post(
@@ -103,7 +187,9 @@ class JobcardService {
       try {
         final err = jsonDecode(response.body);
         throw Exception(
-            err['message'] ?? 'Failed to create job card (${response.statusCode})');
+          err['message'] ??
+              'Failed to create job card (${response.statusCode})',
+        );
       } catch (_) {
         throw Exception('Failed to create job card (${response.statusCode})');
       }
@@ -134,7 +220,9 @@ class JobcardService {
       status: 'pending',
       total: '-',
       createdAt: '-',
-      services: services,
+      services: services
+          .map((service) => JobServiceItem(id: null, text: service))
+          .toList(),
     );
   }
 }

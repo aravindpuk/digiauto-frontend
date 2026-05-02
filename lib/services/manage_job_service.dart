@@ -14,31 +14,32 @@ class ManageJobService {
     };
   }
 
-  // ── Fetch brief list for manage panel ─────────────────────────────────────
   Future<List<Map<String, dynamic>>> fetchManageList() async {
     final branchId = await getBranchId();
     final garageId = await getGarageId();
-    final params   = <String, String>{};
-    if (branchId != null) params['branch_id'] = branchId.toString();
-    else if (garageId != null) params['garage_id'] = garageId.toString();
+    final params = <String, String>{};
+    if (branchId != null)
+      params['branch_id'] = branchId.toString();
+    else if (garageId != null)
+      params['garage_id'] = garageId.toString();
 
-    final uri = Uri.parse(baseUrl + ApiEndpoints.manageJobs)
-        .replace(queryParameters: params.isNotEmpty ? params : null);
+    final uri = Uri.parse(
+      baseUrl + ApiEndpoints.manageJobs,
+    ).replace(queryParameters: params.isNotEmpty ? params : null);
     final res = await http.get(uri, headers: await _headers());
-    _checkStatus(res);
-    final body = jsonDecode(res.body) as Map<String, dynamic>;
-    return List<Map<String, dynamic>>.from(body['jobs'] ?? []);
+    _check(res);
+    return List<Map<String, dynamic>>.from(
+      (jsonDecode(res.body) as Map)['jobs'] ?? [],
+    );
   }
 
-  // ── Full detail of one jobcard ─────────────────────────────────────────────
   Future<Map<String, dynamic>> fetchDetail(int jobcardId) async {
     final uri = Uri.parse(baseUrl + ApiEndpoints.jobCardDetail(jobcardId));
     final res = await http.get(uri, headers: await _headers());
-    _checkStatus(res);
+    _check(res);
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
-  // ── Advance status ────────────────────────────────────────────────────────
   Future<String> updateStatus(int jobcardId) async {
     final uri = Uri.parse(baseUrl + ApiEndpoints.jobCardDetail(jobcardId));
     final res = await http.patch(
@@ -46,34 +47,44 @@ class ManageJobService {
       headers: await _headers(),
       body: jsonEncode({"action": "update_status"}),
     );
-    _checkStatus(res);
-    final body = jsonDecode(res.body) as Map<String, dynamic>;
-    return body['new_status'] as String;
+    _check(res);
+    return (jsonDecode(res.body) as Map)['new_status'] as String;
   }
 
-  // ── Delete jobcard ────────────────────────────────────────────────────────
   Future<void> deleteJobCard(int jobcardId) async {
     final uri = Uri.parse(baseUrl + ApiEndpoints.jobCardDetail(jobcardId));
     final res = await http.delete(uri, headers: await _headers());
-    _checkStatus(res);
+    _check(res);
   }
 
-  // ── Search labour ─────────────────────────────────────────────────────────
-  Future<List<Map<String, dynamic>>> searchLabour(String q) async {
-    final uri = Uri.parse(baseUrl + ApiEndpoints.labourSearch)
-        .replace(queryParameters: {'q': q});
+  /// Search labour — passes garage_id and vehicle_model_id so the API
+  /// can return the suggested price for this specific context.
+  Future<List<Map<String, dynamic>>> searchLabour(
+    String q, {
+    int? garageId,
+    int? vehicleModelId,
+  }) async {
+    final params = <String, String>{'q': q};
+    if (garageId != null) params['garage_id'] = garageId.toString();
+    if (vehicleModelId != null)
+      params['vehicle_model_id'] = vehicleModelId.toString();
+
+    final uri = Uri.parse(
+      baseUrl + ApiEndpoints.labourSearch,
+    ).replace(queryParameters: params);
     final res = await http.get(uri, headers: await _headers());
-    _checkStatus(res);
-    final body = jsonDecode(res.body) as Map<String, dynamic>;
-    return List<Map<String, dynamic>>.from(body['labour'] ?? []);
+    _check(res);
+    return List<Map<String, dynamic>>.from(
+      (jsonDecode(res.body) as Map)['labour'] ?? [],
+    );
   }
 
-  // ── Add labour ────────────────────────────────────────────────────────────
   Future<Map<String, dynamic>> addLabour({
     required int jobcardId,
     int? labourId,
     String? labourName,
     required String amount,
+    int? complaintId,
   }) async {
     final uri = Uri.parse(baseUrl + ApiEndpoints.jobCardLabour(jobcardId));
     final res = await http.post(
@@ -83,14 +94,14 @@ class ManageJobService {
         if (labourId != null) 'labour_id': labourId,
         if (labourName != null) 'labour_name': labourName,
         'amount': amount,
+        if (complaintId != null) 'complaint_id': complaintId,
       }),
     );
-    _checkStatus(res);
-    final body = jsonDecode(res.body) as Map<String, dynamic>;
-    return body['labour_service'] as Map<String, dynamic>;
+    _check(res);
+    return (jsonDecode(res.body) as Map)['labour_service']
+        as Map<String, dynamic>;
   }
 
-  // ── Remove labour ─────────────────────────────────────────────────────────
   Future<void> removeLabour({
     required int jobcardId,
     required int labourServiceId,
@@ -100,16 +111,15 @@ class ManageJobService {
     req.headers.addAll(await _headers());
     req.body = jsonEncode({'labour_service_id': labourServiceId});
     final streamed = await req.send();
-    final res = await http.Response.fromStream(streamed);
-    _checkStatus(res);
+    _check(await http.Response.fromStream(streamed));
   }
 
-  void _checkStatus(http.Response res) {
+  void _check(http.Response res) {
     if (res.statusCode < 200 || res.statusCode >= 300) {
       String msg = 'Request failed (${res.statusCode})';
       try {
         final b = jsonDecode(res.body);
-        if (b is Map && b['message'] != null) msg = b['message'];
+        if (b is Map && b['message'] != null) msg = b['message'].toString();
       } catch (_) {}
       throw Exception(msg);
     }

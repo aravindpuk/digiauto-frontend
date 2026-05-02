@@ -170,7 +170,7 @@ class _HomeScreenState extends State<HomeScreen>
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.grey.withOpacity(0.15),
+                  color: Colors.grey.withValues(alpha: 0.15),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
@@ -211,11 +211,65 @@ class _HomeScreenState extends State<HomeScreen>
                           _getStatusIcon(job.status.toLowerCase()),
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        "Customer: ${job.customerName.isEmpty ? '-' : job.customerName}",
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF3F7FA),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 16,
+                              backgroundColor: primaryColor.withValues(
+                                alpha: 0.12,
+                              ),
+                              child: Text(
+                                _initial(job.customerName),
+                                style: TextStyle(
+                                  color: primaryColor,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    job.customerName.isEmpty
+                                        ? "Customer not set"
+                                        : job.customerName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    job.mobile.isEmpty ? "-" : job.mobile,
+                                    style: const TextStyle(
+                                      color: Colors.black54,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      Text("Date: ${job.createdAt}"),
+                      const SizedBox(height: 8),
+                      Text(
+                        "Date: ${job.formattedCreatedAt}",
+                        style: const TextStyle(color: Colors.black54),
+                      ),
                       const SizedBox(height: 8),
                       Align(
                         alignment: Alignment.bottomRight,
@@ -363,7 +417,13 @@ class _HomeScreenState extends State<HomeScreen>
           // Handle settings navigation
         }
       },
-      backgroundColor: secondaryColor.withOpacity(0.95),
+      backgroundColor: secondaryColor.withValues(alpha: 0.95),
     );
+  }
+
+  String _initial(String value) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return "?";
+    return trimmed.substring(0, 1).toUpperCase();
   }
 }

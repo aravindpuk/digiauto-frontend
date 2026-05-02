@@ -2,166 +2,177 @@ import 'package:digiauto/models/chat.dart';
 import 'package:digiauto/services/manage_job_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-/// Sub-steps inside manage-jobs
 enum ManageStep {
-  loadingList,   // fetching job list
-  showList,      // showing job list as options
-  showActions,   // showing action options for a selected job
-  confirmStatus, // confirming status advance
-  confirmDelete, // confirming delete
-  addLabourSearch,  // user typing labour name
-  addLabourAmount,  // user entering amount
-  removeLabour,  // listing labours for removal
-  done,          // terminal — pop back
+  loadingList,
+  showList,
+  showActions,
+  confirmStatus,
+  confirmDelete,
+  addLabourSelectComplaint,
+  addLabourSearch, // user typing to search
+  addLabourSelectFromResults, // results shown, waiting for chip tap
+  addLabourConfirmPrice, // existing labour selected — show price, ask confirm or edit
+  addLabourEnterPrice, // user typing a custom/edited price
+  removeLabour,
+  done,
   error,
 }
 
 class ManageJobCubit extends Cubit<List<ChatMessage>> {
   ManageJobCubit({required ManageJobService service})
-      : _service = service,
-        super([]);
+    : _service = service,
+      super([]);
 
   final ManageJobService _service;
 
   ManageStep manageStep = ManageStep.loadingList;
   bool isBusy = false;
+  bool hasChanges = false;
 
-  // selected job data
+  // selected job
   int? selectedJobId;
-  String? selectedJobDisplay;  // "DIGI-J01 • KL11U1234"
+  String? selectedJobDisplay;
   String? selectedJobStatus;
+  int? selectedVehicleModelId;
+  int? selectedGarageId;
 
-  // labour add flow
+  // complaints on the jobcard
+  List<Map<String, dynamic>> jobComplaints = [];
+  int? selectedComplaintId;
+  String? selectedComplaintText;
+
+  // labour add sub-flow
   List<Map<String, dynamic>> labourSearchResults = [];
   int? pendingLabourId;
   String? pendingLabourName;
+  String? pendingLabourSuggestedPrice; // from DB
+  bool pendingLabourIsNew = false;
 
-  // labour list for removal
+  // labour remove
   List<Map<String, dynamic>> existingLabours = [];
 
-  // Whether input bar should be visible
   bool get showInput =>
       manageStep == ManageStep.addLabourSearch ||
-      manageStep == ManageStep.addLabourAmount;
+      manageStep == ManageStep.addLabourEnterPrice;
 
   String get inputHint {
-    if (manageStep == ManageStep.addLabourSearch) return "Search labour name...";
-    if (manageStep == ManageStep.addLabourAmount) return "Enter amount (₹)";
+    if (manageStep == ManageStep.addLabourSearch) {
+      return "Search or type labour name...";
+    }
+    if (manageStep == ManageStep.addLabourEnterPrice) return "Enter amount (₹)";
     return "";
   }
 
-  // ── Start ─────────────────────────────────────────────────────────────────
+  // ── Start ──────────────────────────────────────────────────────────────────
 
   Future<void> start() async {
-    _addBot("Fetching your job cards...");
+    _bot("Fetching your job cards...");
     isBusy = true;
     try {
       final jobs = await _service.fetchManageList();
       isBusy = false;
       if (jobs.isEmpty) {
-        _addBot("No active job cards found.");
+        _bot("No active job cards found.");
         manageStep = ManageStep.done;
         return;
       }
       manageStep = ManageStep.showList;
-      final options = jobs.map((j) =>
-          "${j['job_id']} • ${j['vehicle_number']} (${j['status']})").toList();
       emit([
         ...state,
         ChatMessage(
           text: "Select a job card to manage:",
           isUser: false,
-          options: options,
-          step: 0,
+          options: jobs
+              .map(
+                (j) =>
+                    "${j['job_id']} • ${j['vehicle_number']} (${j['status']})",
+              )
+              .toList(),
+          step: 10,
         ),
       ]);
     } catch (e) {
       isBusy = false;
       manageStep = ManageStep.error;
-      _addBot("Could not load jobs. Please try again.");
+      _bot("Could not load jobs. Please try again.");
     }
   }
 
-  // ── Job selected ──────────────────────────────────────────────────────────
+  // ── Job selected ───────────────────────────────────────────────────────────
 
   Future<void> selectJob(String display) async {
-    _addUserMsg(display);
+    _user(display);
     isBusy = true;
-    _addBot("Loading job details...");
-
+    _bot("Loading job details...");
     try {
-      // Parse id from display string "DIGI-J01 • KL11U1234 (pending)"
-      // We re-fetch the list to find the id
       final jobs = await _service.fetchManageList();
-      isBusy = false;
-
-      // Match by job_id prefix inside display
       final match = jobs.firstWhere(
         (j) => display.startsWith(j['job_id'].toString()),
         orElse: () => {},
       );
       if (match.isEmpty) {
-        _addBot("Could not find that job. Please try again.");
+        isBusy = false;
+        _bot("Could not find that job. Please try again.");
         return;
       }
 
-      selectedJobId      = match['id'] as int;
+      selectedJobId = match['id'] as int;
       selectedJobDisplay = "${match['job_id']} • ${match['vehicle_number']}";
-      selectedJobStatus  = match['status'] as String;
+      selectedJobStatus = match['status'] as String;
+
+      // Fetch detail to get complaints and vehicle model
+      final detail = await _service.fetchDetail(selectedJobId!);
+      isBusy = false;
+
+      jobComplaints = List<Map<String, dynamic>>.from(
+        detail['services'] ?? detail['complaints_list'] ?? [],
+      );
+      selectedGarageId = detail['garage_id'] as int?;
+      selectedVehicleModelId = detail['vehicle_model_id'] as int?;
 
       manageStep = ManageStep.showActions;
       _showActionOptions();
     } catch (e) {
       isBusy = false;
-      _addBot("Something went wrong. Please try again.");
+      _bot("Something went wrong. Please try again.");
     }
   }
 
   void _showActionOptions() {
-    final status = selectedJobStatus ?? "pending";
-    final canAdvance = !["delivered"].contains(status.toLowerCase());
-
-    final actions = [
-      if (canAdvance) "Update Status",
-      "Add Labour",
-      "Remove Labour",
-      "Edit Job Card",
-      "Delete Job Card",
-    ];
-
+    final st = (selectedJobStatus ?? "pending").toLowerCase();
     emit([
       ...state,
       ChatMessage(
         text: "What would you like to do with $selectedJobDisplay?",
         isUser: false,
-        options: actions,
-        step: 1,
+        step: 11,
+        options: [
+          if (st != "delivered") "Update Status",
+          "Add Labour",
+          "Remove Labour",
+          "Edit Job Card",
+          "Delete Job Card",
+        ],
       ),
     ]);
   }
 
-  // ── Action selected ───────────────────────────────────────────────────────
+  // ── Action selected ────────────────────────────────────────────────────────
 
   Future<void> selectAction(String action) async {
-    _addUserMsg(action);
-
+    _user(action);
     switch (action) {
       case "Update Status":
         await _startStatusUpdate();
         break;
       case "Add Labour":
-        await _startAddLabour();
+        _startAddLabour();
         break;
       case "Remove Labour":
         await _startRemoveLabour();
         break;
       case "Edit Job Card":
         manageStep = ManageStep.done;
-        // Signal to the screen to open the creation flow in edit mode
-        emit([...state,
-          const ChatMessage(
-            text: "Opening job card editor...",
-            isUser: false, step: 2)]);
         break;
       case "Delete Job Card":
         _startDelete();
@@ -169,228 +180,324 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     }
   }
 
-  // ── Status update ─────────────────────────────────────────────────────────
+  // ── Status update ──────────────────────────────────────────────────────────
 
   Future<void> _startStatusUpdate() async {
-    final current = selectedJobStatus ?? "pending";
     const order = ["pending", "active", "completed", "delivered"];
-    final idx = order.indexOf(current.toLowerCase());
-    final next = idx >= 0 && idx < order.length - 1 ? order[idx + 1] : null;
-
+    final idx = order.indexOf((selectedJobStatus ?? "pending").toLowerCase());
+    final next = (idx >= 0 && idx < order.length - 1) ? order[idx + 1] : null;
     if (next == null) {
-      _addBot("This job is already at the final status.");
-      manageStep = ManageStep.showActions;
+      _bot("This job is already at the final status.");
       _showActionOptions();
       return;
     }
-
     manageStep = ManageStep.confirmStatus;
     emit([
       ...state,
       ChatMessage(
-        text: "Current status: $current\nNext status will be: $next\n\nAre you sure you want to update?",
+        text:
+            "Current status: ${selectedJobStatus ?? 'pending'}\nNext status: $next\n\nAre you sure?",
         isUser: false,
         options: const ["Yes, Update", "Cancel"],
-        step: 2,
+        step: 12,
       ),
     ]);
   }
 
   Future<void> confirmStatusUpdate(bool confirmed) async {
     if (!confirmed) {
-      _addUserMsg("Cancel");
+      _user("Cancel");
       manageStep = ManageStep.showActions;
       _showActionOptions();
       return;
     }
-    _addUserMsg("Yes, Update");
+    _user("Yes, Update");
     isBusy = true;
-    _addBot("Updating status...");
+    _bot("Updating status...");
     try {
       final newStatus = await _service.updateStatus(selectedJobId!);
       isBusy = false;
       selectedJobStatus = newStatus;
-      _addBot("✅ Status updated to \"$newStatus\" successfully.");
-      manageStep = ManageStep.showActions;
-      _showActionOptions();
+      hasChanges = true;
+      _bot('✅ Status updated to "$newStatus" successfully.');
     } catch (e) {
       isBusy = false;
-      _addBot("Failed to update status: ${e.toString().replaceAll('Exception: ', '')}");
-      manageStep = ManageStep.showActions;
-      _showActionOptions();
+      _bot("Failed to update status: ${_clean(e)}");
     }
+    manageStep = ManageStep.showActions;
+    _showActionOptions();
   }
 
-  // ── Delete ────────────────────────────────────────────────────────────────
+  // ── Delete ─────────────────────────────────────────────────────────────────
 
   void _startDelete() {
     manageStep = ManageStep.confirmDelete;
     emit([
       ...state,
       ChatMessage(
-        text: "⚠️ Are you sure you want to delete $selectedJobDisplay? This cannot be undone.",
+        text:
+            "⚠️ Are you sure you want to delete $selectedJobDisplay?\nThis cannot be undone.",
         isUser: false,
         options: const ["Yes, Delete", "Cancel"],
-        step: 2,
+        step: 12,
       ),
     ]);
   }
 
   Future<void> confirmDelete(bool confirmed) async {
     if (!confirmed) {
-      _addUserMsg("Cancel");
+      _user("Cancel");
       manageStep = ManageStep.showActions;
       _showActionOptions();
       return;
     }
-    _addUserMsg("Yes, Delete");
+    _user("Yes, Delete");
     isBusy = true;
-    _addBot("Deleting job card...");
+    _bot("Deleting job card...");
     try {
       await _service.deleteJobCard(selectedJobId!);
       isBusy = false;
-      _addBot("✅ Job card deleted successfully.");
+      hasChanges = true;
+      _bot("✅ Job card deleted successfully.");
       manageStep = ManageStep.done;
     } catch (e) {
       isBusy = false;
-      _addBot("Failed to delete: ${e.toString().replaceAll('Exception: ', '')}");
+      _bot("Failed to delete: ${_clean(e)}");
       manageStep = ManageStep.showActions;
       _showActionOptions();
     }
   }
 
-  // ── Add Labour ────────────────────────────────────────────────────────────
+  // ── Add Labour — Step 1: select complaint ──────────────────────────────────
 
-  Future<void> _startAddLabour() async {
-    manageStep = ManageStep.addLabourSearch;
-    labourSearchResults = [];
-    pendingLabourId = null;
-    pendingLabourName = null;
-    _addBot("Type a labour name to search, or enter a new one:");
-  }
+  void _startAddLabour() {
+    _resetLabourState();
 
-  Future<void> handleLabourSearchInput(String query) async {
-    if (query.trim().isEmpty) return;
-
-    if (manageStep == ManageStep.addLabourSearch) {
-      // Search
-      try {
-        labourSearchResults = await _service.searchLabour(query.trim());
-      } catch (_) {
-        labourSearchResults = [];
-      }
-
-      if (labourSearchResults.isEmpty) {
-        // Use as new labour name directly
-        pendingLabourId   = null;
-        pendingLabourName = query.trim();
-        manageStep = ManageStep.addLabourAmount;
-        _addUserMsg(query.trim());
-        _addBot('Adding "$pendingLabourName" as new labour. Enter the amount (₹):');
-      } else {
-        final options = labourSearchResults
-            .map((l) => l['name'].toString())
-            .toList()
-          ..add("➕ Add \"${query.trim()}\" as new");
-
-        emit([
-          ...state,
-          ChatMessage(
-            text: "Select a labour or add new:",
-            isUser: false,
-            options: options,
-            step: 3,
-          ),
-        ]);
-      }
+    if (jobComplaints.isEmpty) {
+      _bot("No services found on this job card. Please add services first.");
+      manageStep = ManageStep.showActions;
+      _showActionOptions();
       return;
     }
 
-    if (manageStep == ManageStep.addLabourAmount) {
-      final amount = query.trim();
-      if (double.tryParse(amount) == null) {
-        _addBot("Please enter a valid number for the amount.");
-        return;
-      }
-      _addUserMsg(amount);
-      await _submitLabour(amount);
+    manageStep = ManageStep.addLabourSelectComplaint;
+    emit([
+      ...state,
+      ChatMessage(
+        text: "Which service is this labour for?",
+        isUser: false,
+        options: jobComplaints.map((c) => c['text'].toString()).toList(),
+        step: 13,
+      ),
+    ]);
+  }
+
+  // Called when user taps a complaint chip
+  void selectComplaint(String text) {
+    final match = jobComplaints.firstWhere(
+      (c) => c['text'].toString() == text,
+      orElse: () => {'id': null, 'text': text},
+    );
+    selectedComplaintId = match['id'] as int?;
+    selectedComplaintText = text;
+    _user(text);
+
+    manageStep = ManageStep.addLabourSearch;
+    _bot('Got it — "$text". Now search for a labour name:');
+  }
+
+  // ── Add Labour — Step 2: search ────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> previewLabourSearch(String query) async {
+    final q = query.trim();
+    if (q.isEmpty || manageStep != ManageStep.addLabourSearch) return [];
+    labourSearchResults = await _service.searchLabour(
+      q,
+      garageId: selectedGarageId,
+      vehicleModelId: selectedVehicleModelId,
+    );
+    return labourSearchResults;
+  }
+
+  // Called from handleTextInput when step == addLabourSearch
+  Future<void> _handleLabourSearch(String query) async {
+    _user(query);
+    try {
+      labourSearchResults = await _service.searchLabour(
+        query,
+        garageId: selectedGarageId,
+        vehicleModelId: selectedVehicleModelId,
+      );
+    } catch (_) {
+      labourSearchResults = [];
+    }
+
+    if (labourSearchResults.isEmpty) {
+      // Labour doesn't exist — treat typed text as new labour name
+      pendingLabourId = null;
+      pendingLabourName = query;
+      pendingLabourSuggestedPrice = null;
+      pendingLabourIsNew = true;
+      manageStep = ManageStep.addLabourEnterPrice;
+      _bot(
+        '"$query" is not in the system yet.\nEnter the amount (₹) to add it:',
+      );
+    } else {
+      // Show results as chips
+      manageStep = ManageStep.addLabourSelectFromResults;
+      final options =
+          labourSearchResults.map((l) => l['name'].toString()).toList()
+            ..add('➕ Add "$query" as new');
+      emit([
+        ...state,
+        ChatMessage(
+          text: "Select a matching labour:",
+          isUser: false,
+          options: options,
+          step: 14,
+        ),
+      ]);
     }
   }
 
-  void selectLabourOption(String option) {
+  // ── Add Labour — Step 3a: user selects from results ────────────────────────
+
+  void selectLabourFromResults(String option) {
+    _user(option);
+
     if (option.startsWith("➕ Add")) {
-      // Extract name between quotes
-      final name = option.replaceAll(RegExp(r'^➕ Add "'), "").replaceAll('"', "");
-      pendingLabourId   = null;
+      // New labour — extract name
+      final name = option
+          .replaceFirst(RegExp(r'^➕ Add "'), '')
+          .replaceAll(RegExp(r'".*$'), '');
+      pendingLabourId = null;
       pendingLabourName = name;
-    } else {
-      final match = labourSearchResults.firstWhere(
-        (l) => l['name'].toString() == option,
-        orElse: () => {},
-      );
-      if (match.isNotEmpty) {
-        pendingLabourId   = match['id'] as int;
-        pendingLabourName = match['name'] as String;
-      }
+      pendingLabourSuggestedPrice = null;
+      pendingLabourIsNew = true;
+      manageStep = ManageStep.addLabourEnterPrice;
+      _bot('"$name" is not in the system yet.\nEnter the amount (₹):');
+      return;
     }
-    manageStep = ManageStep.addLabourAmount;
-    _addUserMsg(option);
-    _addBot("Enter the labour amount (₹):");
+
+    // Existing labour selected
+    final match = labourSearchResults.firstWhere(
+      (l) => l['name'].toString() == option,
+      orElse: () => {},
+    );
+    if (match.isEmpty) return;
+
+    pendingLabourId = match['id'] as int;
+    pendingLabourName = match['name'] as String;
+    pendingLabourSuggestedPrice = match['suggested_price'] as String?;
+    pendingLabourIsNew = false;
+
+    // ── Step 3b: show suggested price, let user confirm or edit ───────────
+    manageStep = ManageStep.addLabourConfirmPrice;
+
+    if (pendingLabourSuggestedPrice != null) {
+      emit([
+        ...state,
+        ChatMessage(
+          text:
+              "Labour: $pendingLabourName\nSuggested price: ₹$pendingLabourSuggestedPrice\n\nUse this price or enter a different one?",
+          isUser: false,
+          options: [
+            "Use ₹$pendingLabourSuggestedPrice",
+            "Enter Different Price",
+          ],
+          step: 14,
+        ),
+      ]);
+    } else {
+      // No price in DB — go straight to entry
+      manageStep = ManageStep.addLabourEnterPrice;
+      _bot(
+        "$pendingLabourName selected.\nNo default price found. Enter the amount (₹):",
+      );
+    }
   }
+
+  // Called when user taps "Use ₹XXX" or "Enter Different Price"
+  Future<void> handlePriceConfirmOption(String option) async {
+    _user(option);
+    if (option.startsWith("Use ₹")) {
+      // Confirm suggested price directly
+      await _submitLabour(pendingLabourSuggestedPrice!);
+    } else {
+      // Ask user to type a price
+      manageStep = ManageStep.addLabourEnterPrice;
+      _bot("Enter the amount (₹):");
+    }
+  }
+
+  // ── Add Labour — Step 4: price typed ──────────────────────────────────────
+
+  Future<void> _handlePriceInput(String input) async {
+    if (double.tryParse(input) == null) {
+      _bot("Please enter a valid number (e.g. 450 or 350.50).");
+      return;
+    }
+    _user(input);
+    await _submitLabour(input);
+  }
+
+  // ── Submit labour ─────────────────────────────────────────────────────────
 
   Future<void> _submitLabour(String amount) async {
     isBusy = true;
-    _addBot("Adding labour...");
+    _bot("Adding labour...");
     try {
       final result = await _service.addLabour(
-        jobcardId:  selectedJobId!,
-        labourId:   pendingLabourId,
-        labourName: pendingLabourId == null ? pendingLabourName : null,
-        amount:     amount,
+        jobcardId: selectedJobId!,
+        labourId: pendingLabourIsNew ? null : pendingLabourId,
+        labourName: pendingLabourIsNew ? pendingLabourName : null,
+        amount: amount,
+        complaintId: selectedComplaintId,
       );
       isBusy = false;
-      _addBot("✅ Labour \"${result['labour_name']}\" (₹${result['amount']}) added successfully.");
-      manageStep = ManageStep.showActions;
-      _showActionOptions();
+      hasChanges = true;
+      _bot(
+        '✅ "${result['labour_name']}" (₹${result['amount']}) added'
+        ' for "$selectedComplaintText".',
+      );
     } catch (e) {
       isBusy = false;
-      _addBot("Failed to add labour: ${e.toString().replaceAll('Exception: ', '')}");
-      manageStep = ManageStep.showActions;
-      _showActionOptions();
+      _bot("Failed to add labour: ${_clean(e)}");
     }
+    manageStep = ManageStep.showActions;
+    _showActionOptions();
   }
 
   // ── Remove Labour ─────────────────────────────────────────────────────────
 
   Future<void> _startRemoveLabour() async {
     isBusy = true;
-    _addBot("Fetching labour list...");
+    _bot("Fetching labour list...");
     try {
       final detail = await _service.fetchDetail(selectedJobId!);
       isBusy = false;
-      final labours = List<Map<String, dynamic>>.from(
-          detail['labour_services'] ?? []);
-      if (labours.isEmpty) {
-        _addBot("No labour services added to this job card yet.");
+      existingLabours = List<Map<String, dynamic>>.from(
+        detail['labour_services'] ?? [],
+      );
+      if (existingLabours.isEmpty) {
+        _bot("No labour services added to this job card yet.");
         manageStep = ManageStep.showActions;
         _showActionOptions();
         return;
       }
-      existingLabours = labours;
       manageStep = ManageStep.removeLabour;
-      // Pass labour list through options so the UI can render delete chips
       emit([
         ...state,
         ChatMessage(
           text: "Tap 🗑 to remove a labour service:",
           isUser: false,
-          labourList: labours,
-          step: 3,
+          labourList: existingLabours,
+          step: 15,
         ),
       ]);
     } catch (e) {
       isBusy = false;
-      _addBot("Could not fetch labour list.");
+      _bot("Could not fetch labour list.");
       manageStep = ManageStep.showActions;
       _showActionOptions();
     }
@@ -398,35 +505,62 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
 
   Future<void> removeLabour(int labourServiceId, String labourName) async {
     isBusy = true;
-    _addBot("Removing \"$labourName\"...");
+    _bot('Removing "$labourName"...');
     try {
       await _service.removeLabour(
-        jobcardId:       selectedJobId!,
+        jobcardId: selectedJobId!,
         labourServiceId: labourServiceId,
       );
       isBusy = false;
+      hasChanges = true;
       existingLabours.removeWhere((l) => l['id'] == labourServiceId);
-      _addBot("✅ \"$labourName\" removed.");
-      manageStep = ManageStep.showActions;
-      _showActionOptions();
+      _bot('✅ "$labourName" removed successfully.');
     } catch (e) {
       isBusy = false;
-      _addBot("Failed to remove: ${e.toString().replaceAll('Exception: ', '')}");
+      _bot("Failed to remove: ${_clean(e)}");
+    }
+    manageStep = ManageStep.showActions;
+    _showActionOptions();
+  }
+
+  // ── Main text input dispatcher ─────────────────────────────────────────────
+
+  Future<void> handleTextInput(String input) async {
+    final t = input.trim();
+    if (t.isEmpty) return;
+    switch (manageStep) {
+      case ManageStep.addLabourSearch:
+        await _handleLabourSearch(t);
+        break;
+      case ManageStep.addLabourEnterPrice:
+        await _handlePriceInput(t);
+        break;
+      default:
+        break;
     }
   }
 
-  // ── Utilities ─────────────────────────────────────────────────────────────
+  // ── Helpers ────────────────────────────────────────────────────────────────
 
-  void _addBot(String text, {List<String>? options, int step = 0}) {
+  void _resetLabourState() {
+    selectedComplaintId = null;
+    selectedComplaintText = null;
+    pendingLabourId = null;
+    pendingLabourName = null;
+    pendingLabourSuggestedPrice = null;
+    pendingLabourIsNew = false;
+    labourSearchResults = [];
+  }
+
+  void _bot(String text, {List<String>? options, int step = 0}) {
     emit([
       ...state,
-      ChatMessage(
-        text: text, isUser: false, options: options, step: step),
+      ChatMessage(text: text, isUser: false, options: options, step: step),
     ]);
   }
 
-  void _addUserMsg(String text) {
-    emit([...state,
-      ChatMessage(text: text, isUser: true, step: 0)]);
-  }
+  void _user(String text) =>
+      emit([...state, ChatMessage(text: text, isUser: true, step: 0)]);
+
+  String _clean(Object e) => e.toString().replaceAll('Exception: ', '');
 }
