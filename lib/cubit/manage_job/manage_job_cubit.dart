@@ -14,6 +14,12 @@ enum ManageStep {
   addLabourConfirmPrice, // existing labour selected — show price, ask confirm or edit
   addLabourEnterPrice, // user typing a custom/edited price
   removeLabour,
+  addSpareSelectComplaint,
+  addSpareSearch,
+  addSpareSelectFromResults,
+  addSpareEnterQuantity,
+  addSpareEnterMrp,
+  removeSpare,
   done,
   error,
 }
@@ -51,15 +57,35 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
   // labour remove
   List<Map<String, dynamic>> existingLabours = [];
 
+  // spare add sub-flow
+  List<Map<String, dynamic>> spareSearchResults = [];
+  int? pendingSpareId;
+  String? pendingSpareName;
+  bool pendingSpareIsNew = false;
+  int? pendingSpareQuantity;
+
+  // spare remove
+  List<Map<String, dynamic>> existingSpares = [];
+
   bool get showInput =>
       manageStep == ManageStep.addLabourSearch ||
-      manageStep == ManageStep.addLabourEnterPrice;
+      manageStep == ManageStep.addLabourEnterPrice ||
+      manageStep == ManageStep.addSpareSearch ||
+      manageStep == ManageStep.addSpareEnterQuantity ||
+      manageStep == ManageStep.addSpareEnterMrp;
 
   String get inputHint {
     if (manageStep == ManageStep.addLabourSearch) {
       return "Search or type labour name...";
     }
     if (manageStep == ManageStep.addLabourEnterPrice) return "Enter amount (₹)";
+    if (manageStep == ManageStep.addSpareSearch) {
+      return "Search or type spare name...";
+    }
+    if (manageStep == ManageStep.addSpareEnterQuantity) {
+      return "Enter quantity";
+    }
+    if (manageStep == ManageStep.addSpareEnterMrp) return "Enter MRP";
     return "";
   }
 
@@ -150,6 +176,8 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
           if (st != "delivered") "Update Status",
           "Add Labour",
           "Remove Labour",
+          "Add Spare",
+          "Remove Spare",
           "Edit Job Card",
           "Delete Job Card",
         ],
@@ -170,6 +198,12 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
         break;
       case "Remove Labour":
         await _startRemoveLabour();
+        break;
+      case "Add Spare":
+        _startAddSpare();
+        break;
+      case "Remove Spare":
+        await _startRemoveSpare();
         break;
       case "Edit Job Card":
         manageStep = ManageStep.done;
@@ -468,6 +502,158 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     _showActionOptions();
   }
 
+  // ── Add Spare ─────────────────────────────────────────────────────────────
+
+  void _startAddSpare() {
+    _resetSpareState();
+
+    if (jobComplaints.isEmpty) {
+      _bot("No services found on this job card. Please add services first.");
+      manageStep = ManageStep.showActions;
+      _showActionOptions();
+      return;
+    }
+
+    manageStep = ManageStep.addSpareSelectComplaint;
+    emit([
+      ...state,
+      ChatMessage(
+        text: "Which service is this spare for?",
+        isUser: false,
+        options: jobComplaints.map((c) => c['text'].toString()).toList(),
+        step: 16,
+      ),
+    ]);
+  }
+
+  void selectSpareComplaint(String text) {
+    final match = jobComplaints.firstWhere(
+      (c) => c['text'].toString() == text,
+      orElse: () => {'id': null, 'text': text},
+    );
+    selectedComplaintId = match['id'] as int?;
+    selectedComplaintText = text;
+    _user(text);
+
+    manageStep = ManageStep.addSpareSearch;
+    _bot('Got it - "$text". Now search for a spare name:');
+  }
+
+  Future<List<Map<String, dynamic>>> previewSpareSearch(String query) async {
+    final q = query.trim();
+    if (q.isEmpty || manageStep != ManageStep.addSpareSearch) return [];
+    spareSearchResults = await _service.searchSpares(q);
+    return spareSearchResults;
+  }
+
+  Future<void> _handleSpareSearch(String query) async {
+    _user(query);
+    try {
+      spareSearchResults = await _service.searchSpares(query);
+    } catch (_) {
+      spareSearchResults = [];
+    }
+
+    if (spareSearchResults.isEmpty) {
+      pendingSpareId = null;
+      pendingSpareName = query;
+      pendingSpareIsNew = true;
+      manageStep = ManageStep.addSpareEnterQuantity;
+      _bot('"$query" is not in the system yet. Enter quantity:');
+    } else {
+      manageStep = ManageStep.addSpareSelectFromResults;
+      final options =
+          spareSearchResults
+              .map((s) => (s['partname'] ?? s['name']).toString())
+              .toList()
+            ..add('Add "$query" as new');
+      emit([
+        ...state,
+        ChatMessage(
+          text: "Select a matching spare:",
+          isUser: false,
+          options: options,
+          step: 17,
+        ),
+      ]);
+    }
+  }
+
+  void selectSpareFromResults(String option) {
+    _user(option);
+
+    if (option.startsWith("Add ")) {
+      final name = option
+          .replaceFirst(RegExp(r'^Add "'), '')
+          .replaceAll(RegExp(r'".*$'), '');
+      pendingSpareId = null;
+      pendingSpareName = name;
+      pendingSpareIsNew = true;
+      manageStep = ManageStep.addSpareEnterQuantity;
+      _bot('"$name" is not in the system yet. Enter quantity:');
+      return;
+    }
+
+    final match = spareSearchResults.firstWhere(
+      (s) => (s['partname'] ?? s['name']).toString() == option,
+      orElse: () => {},
+    );
+    if (match.isEmpty) return;
+
+    pendingSpareId = match['id'] as int;
+    pendingSpareName = (match['partname'] ?? match['name']).toString();
+    pendingSpareIsNew = false;
+    manageStep = ManageStep.addSpareEnterQuantity;
+    _bot("$pendingSpareName selected. Enter quantity:");
+  }
+
+  Future<void> _handleSpareQuantityInput(String input) async {
+    final quantity = int.tryParse(input);
+    if (quantity == null || quantity <= 0) {
+      _bot("Please enter a valid quantity.");
+      return;
+    }
+    pendingSpareQuantity = quantity;
+    _user(input);
+    manageStep = ManageStep.addSpareEnterMrp;
+    _bot("Enter MRP for one item:");
+  }
+
+  Future<void> _handleSpareMrpInput(String input) async {
+    if (double.tryParse(input) == null) {
+      _bot("Please enter a valid MRP (e.g. 450 or 350.50).");
+      return;
+    }
+    _user(input);
+    await _submitSpare(input);
+  }
+
+  Future<void> _submitSpare(String mrp) async {
+    isBusy = true;
+    _bot("Adding spare...");
+    try {
+      final result = await _service.addSpare(
+        jobcardId: selectedJobId!,
+        spareId: pendingSpareIsNew ? null : pendingSpareId,
+        spareName: pendingSpareIsNew ? pendingSpareName : null,
+        quantity: pendingSpareQuantity!,
+        mrp: mrp,
+        complaintId: selectedComplaintId,
+      );
+      isBusy = false;
+      hasChanges = true;
+      _bot(
+        '"${result['part_name']}" x${result['quantity']} '
+        '(₹${result['amount']}) added for "$selectedComplaintText".',
+      );
+    } catch (e) {
+      isBusy = false;
+      _bot("Failed to add spare: ${_clean(e)}");
+    }
+    manageStep = ManageStep.showActions;
+    _showActionOptions();
+  }
+
   // ── Remove Labour ─────────────────────────────────────────────────────────
 
   Future<void> _startRemoveLabour() async {
@@ -523,6 +709,59 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     _showActionOptions();
   }
 
+  // ── Remove Spare ──────────────────────────────────────────────────────────
+
+  Future<void> _startRemoveSpare() async {
+    isBusy = true;
+    _bot("Fetching spare list...");
+    try {
+      final detail = await _service.fetchDetail(selectedJobId!);
+      isBusy = false;
+      existingSpares = List<Map<String, dynamic>>.from(detail['spares'] ?? []);
+      if (existingSpares.isEmpty) {
+        _bot("No spares added to this job card yet.");
+        manageStep = ManageStep.showActions;
+        _showActionOptions();
+        return;
+      }
+      manageStep = ManageStep.removeSpare;
+      emit([
+        ...state,
+        ChatMessage(
+          text: "Tap remove beside a spare:",
+          isUser: false,
+          spareList: existingSpares,
+          step: 18,
+        ),
+      ]);
+    } catch (e) {
+      isBusy = false;
+      _bot("Could not fetch spare list.");
+      manageStep = ManageStep.showActions;
+      _showActionOptions();
+    }
+  }
+
+  Future<void> removeSpare(int jobcardSpareId, String spareName) async {
+    isBusy = true;
+    _bot('Removing "$spareName"...');
+    try {
+      await _service.removeSpare(
+        jobcardId: selectedJobId!,
+        jobcardSpareId: jobcardSpareId,
+      );
+      isBusy = false;
+      hasChanges = true;
+      existingSpares.removeWhere((s) => s['id'] == jobcardSpareId);
+      _bot('"$spareName" removed successfully.');
+    } catch (e) {
+      isBusy = false;
+      _bot("Failed to remove: ${_clean(e)}");
+    }
+    manageStep = ManageStep.showActions;
+    _showActionOptions();
+  }
+
   // ── Main text input dispatcher ─────────────────────────────────────────────
 
   Future<void> handleTextInput(String input) async {
@@ -534,6 +773,15 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
         break;
       case ManageStep.addLabourEnterPrice:
         await _handlePriceInput(t);
+        break;
+      case ManageStep.addSpareSearch:
+        await _handleSpareSearch(t);
+        break;
+      case ManageStep.addSpareEnterQuantity:
+        await _handleSpareQuantityInput(t);
+        break;
+      case ManageStep.addSpareEnterMrp:
+        await _handleSpareMrpInput(t);
         break;
       default:
         break;
@@ -550,6 +798,16 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     pendingLabourSuggestedPrice = null;
     pendingLabourIsNew = false;
     labourSearchResults = [];
+  }
+
+  void _resetSpareState() {
+    selectedComplaintId = null;
+    selectedComplaintText = null;
+    pendingSpareId = null;
+    pendingSpareName = null;
+    pendingSpareIsNew = false;
+    pendingSpareQuantity = null;
+    spareSearchResults = [];
   }
 
   void _bot(String text, {List<String>? options, int step = 0}) {

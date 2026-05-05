@@ -15,4 +15,11 @@ class ApiEndpoints {
   static String jobCardLabour(int jobcardId) => "/labour/jobcard/$jobcardId/";
 
   static const String spares = "/spare/spare-create";
+  static const String spareSearch = "/spare/search/";
+  static String spareList(int branchId) => "/spare/list/$branchId/";
+  static const String spareStockAdd = "/spare/stock/add/";
+  static String spareStockUpdate(int stockId) =>
+      "/spare/stock/update/$stockId/";
+  static String spareUpdate(int spareId) => "/spare/update/$spareId/";
+  static String jobCardSpare(int jobcardId) => "/spare/jobcard/$jobcardId/";
 }

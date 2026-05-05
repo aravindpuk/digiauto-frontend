@@ -24,6 +24,8 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
   late final JobAssistantCubit _cubit;
   Timer? _labourSearchDebounce;
   List<Map<String, dynamic>> _labourSuggestions = [];
+  Timer? _spareSearchDebounce;
+  List<Map<String, dynamic>> _spareSuggestions = [];
   bool _allowPop = false;
 
   @override
@@ -40,6 +42,7 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
     _ctrl.dispose();
     _scroll.dispose();
     _labourSearchDebounce?.cancel();
+    _spareSearchDebounce?.cancel();
     _cubit.close();
     super.dispose();
   }
@@ -52,7 +55,10 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
     } else {
       _cubit.handleInput(text);
     }
-    setState(() => _labourSuggestions = []);
+    setState(() {
+      _labourSuggestions = [];
+      _spareSuggestions = [];
+    });
     _ctrl.clear();
     _scrollToBottom();
   }
@@ -299,6 +305,9 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
           if (msg.labourList?.isNotEmpty ?? false)
             _labourRemoveList(context, msg.labourList!, cubit),
 
+          if (msg.spareList?.isNotEmpty ?? false)
+            _spareRemoveList(context, msg.spareList!, cubit),
+
           // Skip
           if (msg.showSkip)
             TextButton(
@@ -431,6 +440,88 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
     );
   }
 
+  Widget _spareRemoveList(
+    BuildContext context,
+    List<Map<String, dynamic>> spares,
+    JobAssistantCubit cubit,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: spares.map((s) {
+        final name = (s['part_name'] ?? s['name'] ?? '').toString();
+        return Container(
+          margin: const EdgeInsets.only(top: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    Text(
+                      "Qty ${s['quantity'] ?? '-'} • ₹${s['amount'] ?? '-'}",
+                      style: const TextStyle(color: Colors.grey, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                tooltip: "Remove",
+                onPressed: () =>
+                    _confirmRemoveSpare(context, cubit, s['id'] as int, name),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  void _confirmRemoveSpare(
+    BuildContext context,
+    JobAssistantCubit cubit,
+    int id,
+    String name,
+  ) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Remove Spare"),
+        content: Text('Remove "$name" from this job card?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () {
+              Navigator.pop(context);
+              cubit.manageCubit?.removeSpare(id, name);
+            },
+            child: const Text("Remove", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ─── Service chips ─────────────────────────────────────────────────────────
 
   Widget _serviceChips(JobAssistantCubit cubit) => Container(
@@ -503,6 +594,8 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
           children: [
             if (_labourSuggestions.isNotEmpty && _isLabourSearch(cubit))
               _labourSuggestionPanel(cubit),
+            if (_spareSuggestions.isNotEmpty && _isSpareSearch(cubit))
+              _spareSuggestionPanel(cubit),
             Row(
               children: [
                 Expanded(
@@ -561,14 +654,30 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
         cubit.manageCubit?.manageStep == ManageStep.addLabourSearch;
   }
 
+  bool _isSpareSearch(JobAssistantCubit cubit) {
+    return cubit.isManaging &&
+        cubit.manageCubit?.manageStep == ManageStep.addSpareSearch;
+  }
+
   void _onInputChanged(JobAssistantCubit cubit, String value) {
-    if (!_isLabourSearch(cubit)) {
+    if (!_isLabourSearch(cubit) && !_isSpareSearch(cubit)) {
       if (_labourSuggestions.isNotEmpty) {
         setState(() => _labourSuggestions = []);
+      }
+      if (_spareSuggestions.isNotEmpty) {
+        setState(() => _spareSuggestions = []);
       }
       return;
     }
 
+    if (_isLabourSearch(cubit)) {
+      _previewLabourSuggestions(cubit, value);
+      return;
+    }
+    _previewSpareSuggestions(cubit, value);
+  }
+
+  void _previewLabourSuggestions(JobAssistantCubit cubit, String value) {
     _labourSearchDebounce?.cancel();
     _labourSearchDebounce = Timer(const Duration(milliseconds: 280), () async {
       final query = value.trim();
@@ -583,6 +692,25 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
         setState(() => _labourSuggestions = results.take(5).toList());
       } catch (_) {
         if (mounted) setState(() => _labourSuggestions = []);
+      }
+    });
+  }
+
+  void _previewSpareSuggestions(JobAssistantCubit cubit, String value) {
+    _spareSearchDebounce?.cancel();
+    _spareSearchDebounce = Timer(const Duration(milliseconds: 280), () async {
+      final query = value.trim();
+      if (query.length < 2) {
+        if (mounted) setState(() => _spareSuggestions = []);
+        return;
+      }
+      try {
+        final results =
+            await cubit.manageCubit?.previewSpareSearch(query) ?? [];
+        if (!mounted || _ctrl.text.trim() != query) return;
+        setState(() => _spareSuggestions = results.take(5).toList());
+      } catch (_) {
+        if (mounted) setState(() => _spareSuggestions = []);
       }
     });
   }
@@ -611,6 +739,38 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
               _ctrl.clear();
               setState(() => _labourSuggestions = []);
               cubit.manageCubit?.selectLabourFromResults(name);
+              _scrollToBottom();
+            },
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _spareSuggestionPanel(JobAssistantCubit cubit) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE0E8ED)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: _spareSuggestions.map((spare) {
+          final name = (spare['partname'] ?? spare['name'] ?? '').toString();
+          final partNumber = spare['partnumber']?.toString() ?? '';
+          return ListTile(
+            dense: true,
+            leading: const Icon(Icons.build_circle_outlined),
+            title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis),
+            subtitle: partNumber.isEmpty ? null : Text(partNumber),
+            onTap: () {
+              _spareSearchDebounce?.cancel();
+              _ctrl.clear();
+              setState(() => _spareSuggestions = []);
+              cubit.manageCubit?.selectSpareFromResults(name);
               _scrollToBottom();
             },
           );

@@ -18,10 +18,11 @@ class ManageJobService {
     final branchId = await getBranchId();
     final garageId = await getGarageId();
     final params = <String, String>{};
-    if (branchId != null)
+    if (branchId != null) {
       params['branch_id'] = branchId.toString();
-    else if (garageId != null)
+    } else if (garageId != null) {
       params['garage_id'] = garageId.toString();
+    }
 
     final uri = Uri.parse(
       baseUrl + ApiEndpoints.manageJobs,
@@ -66,8 +67,9 @@ class ManageJobService {
   }) async {
     final params = <String, String>{'q': q};
     if (garageId != null) params['garage_id'] = garageId.toString();
-    if (vehicleModelId != null)
+    if (vehicleModelId != null) {
       params['vehicle_model_id'] = vehicleModelId.toString();
+    }
 
     final uri = Uri.parse(
       baseUrl + ApiEndpoints.labourSearch,
@@ -76,6 +78,17 @@ class ManageJobService {
     _check(res);
     return List<Map<String, dynamic>>.from(
       (jsonDecode(res.body) as Map)['labour'] ?? [],
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> searchSpares(String q) async {
+    final uri = Uri.parse(
+      baseUrl + ApiEndpoints.spareSearch,
+    ).replace(queryParameters: {'q': q});
+    final res = await http.get(uri, headers: await _headers());
+    _check(res);
+    return List<Map<String, dynamic>>.from(
+      (jsonDecode(res.body) as Map)['spares'] ?? [],
     );
   }
 
@@ -110,6 +123,43 @@ class ManageJobService {
     final req = http.Request('DELETE', uri);
     req.headers.addAll(await _headers());
     req.body = jsonEncode({'labour_service_id': labourServiceId});
+    final streamed = await req.send();
+    _check(await http.Response.fromStream(streamed));
+  }
+
+  Future<Map<String, dynamic>> addSpare({
+    required int jobcardId,
+    int? spareId,
+    String? spareName,
+    required int quantity,
+    required String mrp,
+    int? complaintId,
+  }) async {
+    final uri = Uri.parse(baseUrl + ApiEndpoints.jobCardSpare(jobcardId));
+    final res = await http.post(
+      uri,
+      headers: await _headers(),
+      body: jsonEncode({
+        if (spareId != null) 'spare_id': spareId,
+        if (spareName != null) 'spare_name': spareName,
+        'quantity': quantity,
+        'mrp': mrp,
+        if (complaintId != null) 'complaint_id': complaintId,
+      }),
+    );
+    _check(res);
+    return (jsonDecode(res.body) as Map)['jobcard_spare']
+        as Map<String, dynamic>;
+  }
+
+  Future<void> removeSpare({
+    required int jobcardId,
+    required int jobcardSpareId,
+  }) async {
+    final uri = Uri.parse(baseUrl + ApiEndpoints.jobCardSpare(jobcardId));
+    final req = http.Request('DELETE', uri);
+    req.headers.addAll(await _headers());
+    req.body = jsonEncode({'jobcard_spare_id': jobcardSpareId});
     final streamed = await req.send();
     _check(await http.Response.fromStream(streamed));
   }

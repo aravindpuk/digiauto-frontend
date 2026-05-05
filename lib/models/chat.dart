@@ -7,6 +7,7 @@ class ChatMessage {
   final bool isSummary;
   // Used by manage-jobs remove-labour step
   final List<Map<String, dynamic>>? labourList;
+  final List<Map<String, dynamic>>? spareList;
 
   const ChatMessage({
     required this.text,
@@ -16,5 +17,6 @@ class ChatMessage {
     this.step,
     this.isSummary = false,
     this.labourList,
+    this.spareList,
   });
 }

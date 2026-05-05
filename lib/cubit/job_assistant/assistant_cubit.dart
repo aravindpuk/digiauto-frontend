@@ -202,9 +202,17 @@ class JobAssistantCubit extends Cubit<List<ChatMessage>> {
         mc.selectComplaint(option);
         break;
 
+      case ManageStep.addSpareSelectComplaint:
+        mc.selectSpareComplaint(option);
+        break;
+
       // Labour search results shown — user picks one
       case ManageStep.addLabourSelectFromResults:
         mc.selectLabourFromResults(option);
+        break;
+
+      case ManageStep.addSpareSelectFromResults:
+        mc.selectSpareFromResults(option);
         break;
 
       // "Use ₹XXX" or "Enter Different Price"
