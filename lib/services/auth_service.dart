@@ -3,8 +3,7 @@ import 'dart:convert';
 import 'package:digiauto/utils/base_url.dart';
 
 import 'package:http/http.dart' as http;
-import '../utils//api_endpoints.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/api_endpoints.dart';
 
 class AuthService {
   Future<Map<String, dynamic>> login({

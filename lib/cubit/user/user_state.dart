@@ -43,5 +43,12 @@ class UserSuccess extends UserState {
 
 class UserFailure extends UserState {
   final String message;
-  UserFailure(this.message);
+  UserFailure(this.message, UserState previous)
+      : super(
+          name: previous.name,
+          mobile: previous.mobile,
+          pin: previous.pin,
+          isValid: previous.isValid,
+          isLoading: false,
+        );
 }

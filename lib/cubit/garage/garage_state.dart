@@ -56,5 +56,14 @@ class GarageSuccessState extends GarageState {
 
 class GarageFailureState extends GarageState {
   final String message;
-  GarageFailureState(this.message) : super();
+  GarageFailureState(this.message, GarageState previous)
+      : super(
+          garage: previous.garage,
+          mobile: previous.mobile,
+          email: previous.email,
+          latitude: previous.latitude,
+          longitude: previous.longitude,
+          isValid: previous.isValid,
+          isLoading: false,
+        );
 }

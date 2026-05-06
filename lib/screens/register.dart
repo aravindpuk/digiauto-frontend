@@ -5,6 +5,7 @@ import 'package:digiauto/screens/login.dart';
 import 'package:digiauto/services/auth_service.dart';
 import 'package:digiauto/utils/enums.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 class UserProvider extends StatelessWidget {
@@ -33,10 +34,11 @@ class UserRegister extends StatelessWidget {
       listener: (context, state) {
         if (state is UserSuccess) {
           showSnackBar(context, state.message, SnackType.success);
-          Future.delayed(Duration(microseconds: 300), () {
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (!context.mounted) return;
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (_) => LoginScreen()),
+              MaterialPageRoute(builder: (_) => const LoginScreen()),
             );
           });
         }
@@ -147,6 +149,9 @@ class UserRegister extends StatelessWidget {
                           // 🔹 Mobile Number
                           TextField(
                             keyboardType: TextInputType.phone,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
 
                             decoration: InputDecoration(
                               filled: true,
@@ -180,6 +185,9 @@ class UserRegister extends StatelessWidget {
                             obscureText: true,
                             maxLength: 4,
                             keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
 
                             decoration: InputDecoration(
                               filled: true,
@@ -235,7 +243,9 @@ class UserRegister extends StatelessWidget {
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     elevation: 6,
-                                    shadowColor: primaryColor.withOpacity(0.4),
+                                    shadowColor: primaryColor.withValues(
+                                      alpha: 0.4,
+                                    ),
                                   ),
                                   child: const Text(
                                     "Register",
@@ -266,7 +276,7 @@ class UserRegister extends StatelessWidget {
                                   Navigator.pushReplacement(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (_) => LoginScreen(),
+                                      builder: (_) => const LoginScreen(),
                                     ),
                                   );
                                 },

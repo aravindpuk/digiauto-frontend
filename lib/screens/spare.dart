@@ -22,7 +22,11 @@ class _SpareFormState extends State<SpareForm> {
 
   Timer? _debounce;
   List<Map<String, dynamic>> _suggestions = [];
+  List<Map<String, dynamic>> _stockItems = [];
   int? _selectedSpareId;
+  int? _selectedStockId;
+  bool _isEditMode = false;
+  bool _loadingStock = false;
   bool _saving = false;
   String? _message;
   bool _isError = false;
@@ -45,6 +49,14 @@ class _SpareFormState extends State<SpareForm> {
   }
 
   Future<void> _save() async {
+    if (_isEditMode) {
+      await _saveEdit();
+      return;
+    }
+    await _saveAdd();
+  }
+
+  Future<void> _saveAdd() async {
     final partName = _partNameCtrl.text.trim();
     final quantity = int.tryParse(_quantityCtrl.text.trim());
     final mrp = _mrpCtrl.text.trim();
@@ -96,8 +108,79 @@ class _SpareFormState extends State<SpareForm> {
     }
   }
 
+  Future<void> _saveEdit() async {
+    final partName = _partNameCtrl.text.trim();
+    final quantity = int.tryParse(_quantityCtrl.text.trim());
+    final mrp = _mrpCtrl.text.trim();
+    final purchaseRate = _purchaseRateCtrl.text.trim();
+
+    if (_selectedStockId == null || _selectedSpareId == null) {
+      _showMessage("Select a spare stock item to edit.", isError: true);
+      return;
+    }
+    if (partName.isEmpty) {
+      _showMessage("Enter spare name.", isError: true);
+      return;
+    }
+    if (quantity == null || quantity <= 0) {
+      _showMessage("Enter a valid quantity.", isError: true);
+      return;
+    }
+    if (double.tryParse(mrp) == null || double.tryParse(purchaseRate) == null) {
+      _showMessage("Enter valid MRP and purchase rate.", isError: true);
+      return;
+    }
+
+    setState(() {
+      _saving = true;
+      _message = null;
+    });
+
+    try {
+      await _service.updateSpare(
+        spareId: _selectedSpareId!,
+        partName: partName,
+        partNumber: _partNumberCtrl.text.trim(),
+      );
+      await _service.updateStock(
+        stockId: _selectedStockId!,
+        quantity: quantity,
+        mrp: mrp,
+        purchaseAmount: purchaseRate,
+      );
+      await _loadStock();
+      _showMessage("Spare stock updated.");
+    } catch (e) {
+      _showMessage(e.toString().replaceAll('Exception: ', ''), isError: true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _loadStock() async {
+    final branchId = await getBranchId();
+    if (branchId == null) {
+      _showMessage("Branch not found. Please login again.", isError: true);
+      return;
+    }
+    setState(() => _loadingStock = true);
+    try {
+      final items = await _service.listStock(branchId);
+      if (!mounted) return;
+      setState(() {
+        _stockItems = items;
+        _loadingStock = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _loadingStock = false);
+      _showMessage(e.toString().replaceAll('Exception: ', ''), isError: true);
+    }
+  }
+
   void _clearForm() {
     _selectedSpareId = null;
+    _selectedStockId = null;
     _partNameCtrl.clear();
     _partNumberCtrl.clear();
     _quantityCtrl.clear();
@@ -115,6 +198,7 @@ class _SpareFormState extends State<SpareForm> {
   }
 
   void _onPartNameChanged(String value) {
+    if (_isEditMode) return;
     _selectedSpareId = null;
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 280), () async {
@@ -143,6 +227,44 @@ class _SpareFormState extends State<SpareForm> {
     });
   }
 
+  void _setMode(bool editMode) {
+    if (_isEditMode == editMode) return;
+    setState(() {
+      _isEditMode = editMode;
+      _message = null;
+      _suggestions = [];
+      _selectedSpareId = null;
+      _selectedStockId = null;
+      _partNameCtrl.clear();
+      _partNumberCtrl.clear();
+      _quantityCtrl.clear();
+      _mrpCtrl.clear();
+      _purchaseRateCtrl.clear();
+    });
+    if (editMode) _loadStock();
+  }
+
+  void _selectStock(int? stockId) {
+    if (stockId == null) return;
+    final stock = _stockItems.firstWhere(
+      (item) => item['id'] == stockId,
+      orElse: () => {},
+    );
+    if (stock.isEmpty) return;
+
+    final spare = (stock['spare'] as Map?) ?? {};
+    setState(() {
+      _selectedStockId = stock['id'] as int;
+      _selectedSpareId = spare['id'] as int?;
+      _partNameCtrl.text = (spare['partname'] ?? '').toString();
+      _partNumberCtrl.text = (spare['partnumber'] ?? '').toString();
+      _quantityCtrl.text = (stock['quantity'] ?? '').toString();
+      _mrpCtrl.text = (stock['mrp'] ?? '').toString();
+      _purchaseRateCtrl.text = (stock['purchase_amount'] ?? '').toString();
+      _message = null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -158,13 +280,16 @@ class _SpareFormState extends State<SpareForm> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _modeSelector(theme),
+            const SizedBox(height: 18),
             Text(
-              "Add Inventory",
+              _isEditMode ? "Edit Inventory" : "Add Inventory",
               style: theme.textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 16),
+            if (_isEditMode) _stockPicker(),
             _partSearchField(),
             _textField(
               controller: _partNumberCtrl,
@@ -226,7 +351,13 @@ class _SpareFormState extends State<SpareForm> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.save_outlined),
-                label: Text(_saving ? "Saving..." : "Save Spare Stock"),
+                label: Text(
+                  _saving
+                      ? "Saving..."
+                      : _isEditMode
+                      ? "Update Spare Stock"
+                      : "Save Spare Stock",
+                ),
               ),
             ),
           ],
@@ -244,8 +375,12 @@ class _SpareFormState extends State<SpareForm> {
           onChanged: _onPartNameChanged,
           decoration: InputDecoration(
             labelText: "Part Name",
-            hintText: "Search or enter part name",
-            suffixIcon: _selectedSpareId == null
+            hintText: _isEditMode
+                ? "Correct part name"
+                : "Search or enter part name",
+            suffixIcon: _isEditMode
+                ? const Icon(Icons.edit_outlined)
+                : _selectedSpareId == null
                 ? const Icon(Icons.search)
                 : const Icon(Icons.check_circle, color: Colors.green),
           ),
@@ -277,6 +412,91 @@ class _SpareFormState extends State<SpareForm> {
         else
           const SizedBox(height: 12),
       ],
+    );
+  }
+
+  Widget _modeSelector(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F8),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          _modeButton("Add", !_isEditMode, () => _setMode(false)),
+          _modeButton("Edit", _isEditMode, () => _setMode(true)),
+        ],
+      ),
+    );
+  }
+
+  Widget _modeButton(String label, bool selected, VoidCallback onTap) {
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? Colors.white : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              color: selected ? Colors.black87 : Colors.black54,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _stockPicker() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: DropdownButtonFormField<int>(
+        value: _selectedStockId,
+        isExpanded: true,
+        decoration: InputDecoration(
+          labelText: "Select Spare Stock",
+          suffixIcon: _loadingStock
+              ? const Padding(
+                  padding: EdgeInsets.all(14),
+                  child: SizedBox(
+                    height: 16,
+                    width: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : IconButton(
+                  tooltip: "Refresh",
+                  icon: const Icon(Icons.refresh_rounded),
+                  onPressed: _loadStock,
+                ),
+        ),
+        items: _stockItems.map((stock) {
+          final spare = (stock['spare'] as Map?) ?? {};
+          final name = (spare['partname'] ?? '').toString();
+          final partNumber = (spare['partnumber'] ?? '').toString();
+          final quantity = stock['quantity']?.toString() ?? '-';
+          return DropdownMenuItem<int>(
+            value: stock['id'] as int,
+            child: Text(
+              [
+                name,
+                if (partNumber.isNotEmpty) partNumber,
+                "Qty $quantity",
+              ].join(" • "),
+              overflow: TextOverflow.ellipsis,
+            ),
+          );
+        }).toList(),
+        onChanged: _saving ? null : _selectStock,
+      ),
     );
   }
 

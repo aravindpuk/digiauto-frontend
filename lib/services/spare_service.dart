@@ -40,6 +40,28 @@ class SpareService {
     return (jsonDecode(res.body) as Map)['data'] as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> updateSpare({
+    required int spareId,
+    required String partName,
+    required String partNumber,
+  }) async {
+    final uri = Uri.parse(baseUrl + ApiEndpoints.spareUpdate(spareId));
+    final res = await http.put(
+      uri,
+      headers: await _headers(),
+      body: jsonEncode({'partname': partName, 'partnumber': partNumber}),
+    );
+    _check(res);
+    return (jsonDecode(res.body) as Map)['data'] as Map<String, dynamic>;
+  }
+
+  Future<List<Map<String, dynamic>>> listStock(int branchId) async {
+    final uri = Uri.parse(baseUrl + ApiEndpoints.spareList(branchId));
+    final res = await http.get(uri, headers: await _headers());
+    _check(res);
+    return List<Map<String, dynamic>>.from(jsonDecode(res.body) as List);
+  }
+
   Future<Map<String, dynamic>> addStock({
     required int spareId,
     required int branchId,
@@ -61,6 +83,26 @@ class SpareService {
     );
     _check(res);
     return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> updateStock({
+    required int stockId,
+    required int quantity,
+    required String mrp,
+    required String purchaseAmount,
+  }) async {
+    final uri = Uri.parse(baseUrl + ApiEndpoints.spareStockUpdate(stockId));
+    final res = await http.put(
+      uri,
+      headers: await _headers(),
+      body: jsonEncode({
+        'quantity': quantity,
+        'mrp': mrp,
+        'purchase_amount': purchaseAmount,
+      }),
+    );
+    _check(res);
+    return (jsonDecode(res.body) as Map)['data'] as Map<String, dynamic>;
   }
 
   void _check(http.Response res) {

@@ -30,14 +30,17 @@ class UserCubit extends Cubit<UserState> {
       );
 
       if (response['status'] == 201) {
-        emit(UserSuccess(response['body']['message']));
+        emit(UserSuccess(response['body']['message'] as String? ?? 'Registered'));
       } else {
-        emit(state.copyWith(isLoading: false));
-        emit(UserFailure(response['body']['message']));
+        final failedState = state.copyWith(isLoading: false);
+        emit(UserFailure(
+          response['body']['message'] as String? ?? 'Registration failed.',
+          failedState,
+        ));
       }
     } catch (e) {
-      emit(state.copyWith(isLoading: false));
-      emit(UserFailure(e.toString()));
+      final failedState = state.copyWith(isLoading: false);
+      emit(UserFailure(e.toString(), failedState));
     }
   }
 }

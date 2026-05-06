@@ -6,6 +6,7 @@ import 'package:digiauto/screens/maps.dart';
 import 'package:digiauto/services/garage_service.dart';
 import 'package:digiauto/utils/enums.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 class GarageProvider extends StatelessWidget {
@@ -47,6 +48,7 @@ class _GarageScreenState extends State<GarageScreen> {
         if (state is GarageSuccessState) {
           showSnackBar(context, state.message, SnackType.success);
           Future.delayed(const Duration(milliseconds: 400), () {
+            if (!context.mounted) return;
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (_) => const HomeScreen()),
@@ -134,6 +136,9 @@ class _GarageScreenState extends State<GarageScreen> {
                           // Mobile
                           TextField(
                             keyboardType: TextInputType.phone,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
                             decoration: InputDecoration(
                               filled: true,
                               fillColor: Colors.white,
@@ -174,6 +179,7 @@ class _GarageScreenState extends State<GarageScreen> {
                           TextField(
                             controller: _locationCtrl,
                             readOnly: true,
+                            onTap: () => _pickLocation(context),
                             decoration: InputDecoration(
                               filled: true,
                               fillColor: Colors.white,
@@ -183,37 +189,10 @@ class _GarageScreenState extends State<GarageScreen> {
                               prefixIcon: IconButton(
                                 icon: const Icon(Icons.location_on),
                                 color: secondaryColor,
-                                onPressed: () async {
-                                  final result =
-                                      await Navigator.push<
-                                        Map<String, dynamic>
-                                      >(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              const MapPickerScreen(),
-                                        ),
-                                      );
-
-                                  if (result != null) {
-                                    final lat = result['lat'] as double;
-                                    final lng = result['lng'] as double;
-
-                                    // ✅ Update cubit with proper typed values
-                                    context.read<GarageCubit>().locationUpdate(
-                                      lat: lat,
-                                      lng: lng,
-                                    );
-
-                                    // ✅ Update the text field so user sees the coordinates
-                                    setState(() {
-                                      _locationCtrl.text =
-                                          "${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}";
-                                    });
-                                  }
-                                },
+                                onPressed: () => _pickLocation(context),
                               ),
-                              hintText: "Tap pin to pick location",
+                              suffixIcon: const Icon(Icons.chevron_right),
+                              hintText: "Tap to search and pick location",
                             ),
                           ),
                           const SizedBox(height: 32),
@@ -237,7 +216,7 @@ class _GarageScreenState extends State<GarageScreen> {
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: secondaryColor,
                                     disabledBackgroundColor: secondaryColor
-                                        .withOpacity(0.4),
+                                        .withValues(alpha: 0.4),
                                     padding: const EdgeInsets.symmetric(
                                       vertical: 16,
                                     ),
@@ -245,7 +224,9 @@ class _GarageScreenState extends State<GarageScreen> {
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     elevation: 6,
-                                    shadowColor: primaryColor.withOpacity(0.4),
+                                    shadowColor: primaryColor.withValues(
+                                      alpha: 0.4,
+                                    ),
                                   ),
                                   child: const Text(
                                     "Register",
@@ -273,6 +254,26 @@ class _GarageScreenState extends State<GarageScreen> {
   }
 
   // ─── helpers ──────────────────────────────────────────────────────────────
+
+  Future<void> _pickLocation(BuildContext context) async {
+    final result = await Navigator.push<Map<String, dynamic>>(
+      context,
+      MaterialPageRoute(builder: (_) => const MapPickerScreen()),
+    );
+
+    if (!mounted || result == null) return;
+    final lat = result['lat'] as double;
+    final lng = result['lng'] as double;
+    final name = result['name']?.toString().trim() ?? '';
+
+    context.read<GarageCubit>().locationUpdate(lat: lat, lng: lng);
+
+    setState(() {
+      _locationCtrl.text = name.isNotEmpty
+          ? name
+          : "${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}";
+    });
+  }
 
   Widget _requiredLabel(String text) {
     return RichText(

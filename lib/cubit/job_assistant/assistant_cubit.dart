@@ -41,6 +41,7 @@ class JobAssistantCubit extends Cubit<List<ChatMessage>> {
   bool _isEditingExisting = false;
   bool _hasManagedChanges = false;
   String? _editingJobId;
+  int? _resumeStepAfterEdit;
 
   final Map<int, String> answers = {};
   final List<String> services = [];
@@ -118,6 +119,7 @@ class JobAssistantCubit extends Cubit<List<ChatMessage>> {
     _isEditingExisting = false;
     _hasManagedChanges = false;
     _editingJobId = null;
+    _resumeStepAfterEdit = null;
     manageCubit = null;
     answers.clear();
     services.clear();
@@ -133,6 +135,7 @@ class JobAssistantCubit extends Cubit<List<ChatMessage>> {
         options: _hasExistingJobs
             ? const ["Create New Jobcard", "Manage Jobs"]
             : const ["Create New Jobcard"],
+        optionStyle: "introActions",
         step: introStep,
       ),
     ]);
@@ -159,7 +162,6 @@ class JobAssistantCubit extends Cubit<List<ChatMessage>> {
       return;
     }
     if (value == "Manage Jobs") {
-      addUser(value, stepOverride: introStep);
       _isManaging = true;
       step = manageMode;
       final introMessages = List<ChatMessage>.from(state);
@@ -288,6 +290,7 @@ class JobAssistantCubit extends Cubit<List<ChatMessage>> {
     _editingJobId = job.id;
     step = reviewStep;
     editingStep = null;
+    _resumeStepAfterEdit = null;
     answers
       ..clear()
       ..addAll({
@@ -421,6 +424,7 @@ class JobAssistantCubit extends Cubit<List<ChatMessage>> {
   void editStep(int targetStep) {
     if (_isSubmitting) return;
     if (targetStep < vehicleStep || targetStep > serviceStep) return;
+    _resumeStepAfterEdit = step;
     editingStep = targetStep;
     if (targetStep == serviceStep) {
       emit([
@@ -598,11 +602,21 @@ class JobAssistantCubit extends Cubit<List<ChatMessage>> {
   void _applyEdit(String value, {bool skipped = false}) {
     final target = editingStep;
     if (target == null) return;
+    final resumeStep = _resumeStepAfterEdit ?? reviewStep;
     if (!skipped) addUser(value, stepOverride: target);
     answers[target] = skipped ? '' : value.trim();
     editingStep = null;
-    step = reviewStep;
-    _refreshSummaryInPlace();
+    _resumeStepAfterEdit = null;
+
+    if (resumeStep == reviewStep || _isEditingExisting) {
+      step = reviewStep;
+      _refreshSummaryInPlace();
+      return;
+    }
+
+    step = resumeStep;
+    addBot("Updated ${_fieldLabel(target)}.");
+    askCurrentQuestion();
   }
 
   void reset() => start();

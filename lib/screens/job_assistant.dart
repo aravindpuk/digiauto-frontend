@@ -119,11 +119,7 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
               ),
               body: Container(
                 decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Color(0xFFEAF5FB), Color(0xFFF8F9FA)],
-                  ),
+                  color: Color(0xFFEAF5FB),
                 ),
                 child: Column(
                   children: [
@@ -196,16 +192,17 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
 
   Widget _headerCard(ThemeData theme) => Container(
     width: double.infinity,
-    margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-    padding: const EdgeInsets.all(16),
+    margin: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
     decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: 0.92),
-      borderRadius: BorderRadius.circular(20),
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: const Color(0xFFD9E8EF)),
     ),
     child: Row(
       children: [
         CircleAvatar(
-          radius: 22,
+          radius: 20,
           backgroundColor: theme.primaryColor.withValues(alpha: 0.12),
           child: Icon(
             Icons.directions_car_filled_outlined,
@@ -219,10 +216,13 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
             children: [
               Text(
                 "Digi Assistant",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
               ),
-              SizedBox(height: 4),
-              Text("Create a new jobcard or manage existing jobs."),
+              SizedBox(height: 2),
+              Text(
+                "Jobcard creation and workshop actions",
+                style: TextStyle(fontSize: 12, color: Colors.black54),
+              ),
             ],
           ),
         ),
@@ -239,11 +239,15 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
   ) {
     final theme = Theme.of(context);
     final isUser = msg.isUser;
+    if (!isUser && msg.text.startsWith("Managing ")) {
+      return _jobContextCard(context, msg.text.replaceFirst("Managing ", ""));
+    }
     final bubbleColor = msg.isSummary
         ? const Color(0xFF123247)
         : isUser
         ? theme.primaryColor
         : Colors.white;
+    final textColor = isUser || msg.isSummary ? Colors.white : Colors.black87;
 
     final msgStep = msg.step ?? 0;
     final showEdit =
@@ -255,68 +259,458 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
         !cubit.isSubmitting &&
         !cubit.isManaging;
 
-    return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Column(
-        crossAxisAlignment: isUser
-            ? CrossAxisAlignment.end
-            : CrossAxisAlignment.start,
-        children: [
-          // Bubble
-          Container(
-            constraints: BoxConstraints(
-              maxWidth: MediaQuery.of(context).size.width * 0.82,
-            ),
-            margin: const EdgeInsets.symmetric(vertical: 5),
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: bubbleColor,
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Align(
+        alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+        child: Column(
+          crossAxisAlignment: isUser
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
+          children: [
+            Container(
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.of(context).size.width * 0.78,
+              ),
+              margin: EdgeInsets.only(
+                left: isUser ? 54 : 0,
+                right: isUser ? 0 : 54,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              decoration: BoxDecoration(
+                color: bubbleColor,
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(12),
+                  topRight: const Radius.circular(12),
+                  bottomLeft: Radius.circular(isUser ? 12 : 3),
+                  bottomRight: Radius.circular(isUser ? 3 : 12),
                 ),
+                border: isUser || msg.isSummary
+                    ? null
+                    : Border.all(color: const Color(0xFFE2EEF3)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Text(
+                msg.text,
+                style: TextStyle(
+                  height: 1.36,
+                  fontSize: msg.isSummary ? 13.2 : 14,
+                  color: textColor,
+                  fontWeight: msg.isSummary ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ),
+
+            if (showEdit)
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                onPressed: () => cubit.editStep(msgStep),
+                icon: const Icon(Icons.edit_outlined, size: 15),
+                label: const Text("Edit"),
+              ),
+
+            if (msg.options?.isNotEmpty ?? false)
+              _optionContent(context, msg, cubit),
+
+            if (msg.labourList?.isNotEmpty ?? false)
+              _labourRemoveList(context, msg.labourList!, cubit),
+
+            if (msg.spareList?.isNotEmpty ?? false)
+              _spareRemoveList(context, msg.spareList!, cubit),
+
+            if (msg.showSkip)
+              TextButton(
+                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                onPressed: cubit.skip,
+                child: const Text("Skip this field"),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _jobContextCard(BuildContext context, String display) {
+    final theme = Theme.of(context);
+    final parts = display.split(" • ");
+    final jobId = parts.isNotEmpty ? parts.first : display;
+    final vehicle = parts.length > 1 ? parts[1] : "";
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(0, 8, 0, 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: theme.primaryColor.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            height: 38,
+            width: 38,
+            decoration: BoxDecoration(
+              color: theme.primaryColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(Icons.assignment_outlined, color: theme.primaryColor),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  jobId,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                if (vehicle.isNotEmpty)
+                  Text(
+                    vehicle,
+                    style: const TextStyle(fontSize: 12, color: Colors.black54),
+                  ),
               ],
             ),
-            child: Text(
-              msg.text,
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFE8F5EE),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Text(
+              "Selected",
               style: TextStyle(
-                height: 1.45,
-                color: isUser || msg.isSummary ? Colors.white : Colors.black87,
+                color: Color(0xFF187348),
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
-
-          // Edit button (create flow)
-          if (showEdit)
-            TextButton.icon(
-              onPressed: () => cubit.editStep(msgStep),
-              icon: const Icon(Icons.edit_outlined, size: 15),
-              label: const Text("Edit"),
-            ),
-
-          // Option chips
-          if (msg.options?.isNotEmpty ?? false)
-            _optionChips(context, msg.options!, cubit),
-
-          // Labour list with delete buttons (manage mode)
-          if (msg.labourList?.isNotEmpty ?? false)
-            _labourRemoveList(context, msg.labourList!, cubit),
-
-          if (msg.spareList?.isNotEmpty ?? false)
-            _spareRemoveList(context, msg.spareList!, cubit),
-
-          // Skip
-          if (msg.showSkip)
-            TextButton(
-              onPressed: cubit.skip,
-              child: const Text("Skip this field"),
-            ),
         ],
       ),
     );
+  }
+
+  Widget _optionContent(
+    BuildContext context,
+    ChatMessage msg,
+    JobAssistantCubit cubit,
+  ) {
+    final options = msg.options ?? const <String>[];
+    switch (msg.optionStyle) {
+      case "introActions":
+        return _introActionCards(context, options, cubit);
+      case "jobCards":
+        return _jobCardOptions(context, options, cubit);
+      case "manageActions":
+        return _manageActionGrid(context, options, cubit);
+      default:
+        return _optionChips(context, options, cubit);
+    }
+  }
+
+  void _handleOptionTap(JobAssistantCubit cubit, String option) {
+    if (cubit.isManaging) {
+      cubit.handleManageOption(option);
+    } else {
+      cubit.selectOption(option);
+    }
+    _scrollToBottom();
+  }
+
+  Widget _introActionCards(
+    BuildContext context,
+    List<String> options,
+    JobAssistantCubit cubit,
+  ) {
+    return SizedBox(
+      width: MediaQuery.of(context).size.width * 0.86,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 8, bottom: 4),
+        child: Column(
+          children: options.map((option) {
+            final isCreate = option == "Create New Jobcard";
+            return _largeActionTile(
+              context: context,
+              title: isCreate ? "Create Jobcard" : "Manage Jobs",
+              subtitle: isCreate
+                  ? "Start a guided service entry"
+                  : "Open active jobs and actions",
+              icon: isCreate
+                  ? Icons.add_circle_outline
+                  : Icons.fact_check_outlined,
+              onTap: () => _handleOptionTap(cubit, option),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _largeActionTile({
+    required BuildContext context,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFDCEAF0)),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, color: theme.primaryColor),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        style: const TextStyle(
+                          color: Colors.black54,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.chevron_right_rounded, color: Colors.black38),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _jobCardOptions(
+    BuildContext context,
+    List<String> options,
+    JobAssistantCubit cubit,
+  ) {
+    return SizedBox(
+      width: MediaQuery.of(context).size.width * 0.86,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 8, bottom: 4),
+        child: Column(
+          children: options.map((option) {
+            final parsed = _parseJobOption(option);
+            return Container(
+              width: double.infinity,
+              margin: const EdgeInsets.only(bottom: 8),
+              child: Material(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () => _handleOptionTap(cubit, option),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFDCEAF0)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          height: 38,
+                          width: 38,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE9F4FA),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.directions_car_filled_outlined,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                parsed.$1,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                parsed.$2,
+                                style: const TextStyle(
+                                  color: Colors.black54,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        _statusBadge(parsed.$3),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  (String, String, String) _parseJobOption(String option) {
+    final parts = option.split(" • ");
+    final jobId = parts.isNotEmpty ? parts.first : option;
+    final rest = parts.length > 1 ? parts[1] : "";
+    final match = RegExp(r'^(.*)\s+\((.*)\)$').firstMatch(rest);
+    if (match == null) return (jobId, rest, "");
+    return (jobId, match.group(1) ?? rest, match.group(2) ?? "");
+  }
+
+  Widget _statusBadge(String status) {
+    final label = status.isEmpty ? "open" : status;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6F0),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFF2B6D43),
+        ),
+      ),
+    );
+  }
+
+  Widget _manageActionGrid(
+    BuildContext context,
+    List<String> options,
+    JobAssistantCubit cubit,
+  ) {
+    return SizedBox(
+      width: MediaQuery.of(context).size.width * 0.86,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 8, bottom: 4),
+        child: GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 8,
+          mainAxisSpacing: 8,
+          childAspectRatio: 2.9,
+          children: options.map((option) {
+            final danger = option == "Delete Job Card";
+            return Material(
+              color: danger ? const Color(0xFFFFF1F1) : Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () => _handleOptionTap(cubit, option),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: danger
+                          ? const Color(0xFFFFD1D1)
+                          : const Color(0xFFDCEAF0),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _actionIcon(option),
+                        size: 19,
+                        color: danger
+                            ? Colors.red.shade700
+                            : Theme.of(context).primaryColor,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          option,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: danger
+                                ? Colors.red.shade800
+                                : Colors.black87,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  IconData _actionIcon(String option) {
+    switch (option) {
+      case "Update Status":
+        return Icons.trending_up_rounded;
+      case "Add Labour":
+        return Icons.engineering_outlined;
+      case "Remove Labour":
+        return Icons.person_remove_outlined;
+      case "Add Spare":
+        return Icons.add_box_outlined;
+      case "Remove Spare":
+        return Icons.inventory_2_outlined;
+      case "Edit Job Card":
+        return Icons.edit_note_outlined;
+      case "Delete Job Card":
+        return Icons.delete_outline;
+      default:
+        return Icons.touch_app_outlined;
+    }
   }
 
   // ─── Option chips ──────────────────────────────────────────────────────────
@@ -339,12 +733,7 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
                   context,
                 ).primaryColor.withValues(alpha: 0.08),
                 onPressed: () {
-                  if (cubit.isManaging) {
-                    cubit.handleManageOption(o);
-                  } else {
-                    cubit.selectOption(o);
-                  }
-                  _scrollToBottom();
+                  _handleOptionTap(cubit, o);
                 },
               ),
             )

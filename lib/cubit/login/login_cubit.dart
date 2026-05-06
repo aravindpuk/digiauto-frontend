@@ -8,7 +8,7 @@ class LoginCubit extends Cubit<LoginState> {
   LoginCubit(this.authService) : super(LoginInitial());
 
   void mobileChanged(String value) => emit(state.copyWith(mobile: value));
-  void pinChanged(String value)    => emit(state.copyWith(pin: value));
+  void pinChanged(String value) => emit(state.copyWith(pin: value));
 
   Future<void> login() async {
     if (!state.isValid) return;
@@ -31,13 +31,15 @@ class LoginCubit extends Cubit<LoginState> {
 
         emit(LoginSuccess(body['message'] as String, garageId, branchId));
       } else {
-        emit(state.copyWith(isLoading: false));
+        final failedState = state.copyWith(isLoading: false);
         emit(LoginFailure(
-            result['body']['message'] as String? ?? 'Invalid credentials'));
+          result['body']['message'] as String? ?? 'Invalid credentials',
+          failedState,
+        ));
       }
     } catch (_) {
-      emit(state.copyWith(isLoading: false));
-      emit(LoginFailure('Something went wrong. Please try again.'));
+      final failedState = state.copyWith(isLoading: false);
+      emit(LoginFailure('Something went wrong. Please try again.', failedState));
     }
   }
 

@@ -8,7 +8,7 @@ class GarageCubit extends Cubit<GarageState> {
 
   void garageUpdate(String value) => emit(state.copyWith(garage: value));
   void mobileUpdate(String value) => emit(state.copyWith(mobile: value));
-  void emailUpdate(String value)  => emit(state.copyWith(email: value));
+  void emailUpdate(String value) => emit(state.copyWith(email: value));
 
   void locationUpdate({required double lat, required double lng}) =>
       emit(state.copyWith(latitude: lat, longitude: lng));
@@ -19,10 +19,10 @@ class GarageCubit extends Cubit<GarageState> {
       emit(state.copyWith(isLoading: true));
 
       final result = await service.register(
-        garage:    state.garage,
-        mobile:    state.mobile,
-        email:     state.email,
-        latitude:  state.latitude!,
+        garage: state.garage,
+        mobile: state.mobile,
+        email: state.email,
+        latitude: state.latitude!,
         longitude: state.longitude!,
       );
 
@@ -30,13 +30,18 @@ class GarageCubit extends Cubit<GarageState> {
         emit(GarageSuccessState(
             result['body']['message'] as String? ?? 'Garage registered!'));
       } else {
-        emit(state.copyWith(isLoading: false));
+        final failedState = state.copyWith(isLoading: false);
         emit(GarageFailureState(
-            result['body']['message'] as String? ?? 'Registration failed.'));
+          result['body']['message'] as String? ?? 'Registration failed.',
+          failedState,
+        ));
       }
     } catch (e) {
-      emit(state.copyWith(isLoading: false));
-      emit(GarageFailureState('Something went wrong. Please try again.'));
+      final failedState = state.copyWith(isLoading: false);
+      emit(GarageFailureState(
+        'Something went wrong. Please try again.',
+        failedState,
+      ));
     }
   }
 }

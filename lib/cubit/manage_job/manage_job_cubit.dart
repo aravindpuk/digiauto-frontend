@@ -114,6 +114,7 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
                     "${j['job_id']} • ${j['vehicle_number']} (${j['status']})",
               )
               .toList(),
+          optionStyle: "jobCards",
           step: 10,
         ),
       ]);
@@ -127,7 +128,6 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
   // ── Job selected ───────────────────────────────────────────────────────────
 
   Future<void> selectJob(String display) async {
-    _user(display);
     isBusy = true;
     _bot("Loading job details...");
     try {
@@ -157,6 +157,7 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
       selectedVehicleModelId = detail['vehicle_model_id'] as int?;
 
       manageStep = ManageStep.showActions;
+      _bot("Managing $selectedJobDisplay");
       _showActionOptions();
     } catch (e) {
       isBusy = false;
@@ -172,6 +173,7 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
         text: "What would you like to do with $selectedJobDisplay?",
         isUser: false,
         step: 11,
+        optionStyle: "manageActions",
         options: [
           if (st != "delivered") "Update Status",
           "Add Labour",
