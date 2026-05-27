@@ -214,12 +214,16 @@ class JobAssistantCubit extends Cubit<List<ChatMessage>> {
         break;
 
       case ManageStep.addSpareSelectFromResults:
-        mc.selectSpareFromResults(option);
+        await mc.selectSpareFromResults(option);
         break;
 
       // "Use ₹XXX" or "Enter Different Price"
       case ManageStep.addLabourConfirmPrice:
         await mc.handlePriceConfirmOption(option);
+        break;
+
+      case ManageStep.addSpareConfirmMrp:
+        await mc.handleSpareMrpConfirmOption(option);
         break;
 
       default:

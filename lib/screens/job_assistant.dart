@@ -118,9 +118,7 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
                 ],
               ),
               body: Container(
-                decoration: const BoxDecoration(
-                  color: Color(0xFFEAF5FB),
-                ),
+                decoration: const BoxDecoration(color: Color(0xFFEAF5FB)),
                 child: Column(
                   children: [
                     _headerCard(theme),
@@ -161,8 +159,12 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
                                     12,
                                   ),
                                   itemCount: messages.length,
-                                  itemBuilder: (_, i) =>
-                                      _messageTile(ctx, messages[i], cubit),
+                                  itemBuilder: (_, i) => _messageTile(
+                                    ctx,
+                                    messages[i],
+                                    cubit,
+                                    isActive: _isActiveMessage(messages, i),
+                                  ),
                                 ),
                               ),
 
@@ -235,8 +237,9 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
   Widget _messageTile(
     BuildContext context,
     ChatMessage msg,
-    JobAssistantCubit cubit,
-  ) {
+    JobAssistantCubit cubit, {
+    required bool isActive,
+  }) {
     final theme = Theme.of(context);
     final isUser = msg.isUser;
     if (!isUser && msg.text.startsWith("Managing ")) {
@@ -318,18 +321,20 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
                 label: const Text("Edit"),
               ),
 
-            if (msg.options?.isNotEmpty ?? false)
+            if (isActive && (msg.options?.isNotEmpty ?? false))
               _optionContent(context, msg, cubit),
 
-            if (msg.labourList?.isNotEmpty ?? false)
+            if (isActive && (msg.labourList?.isNotEmpty ?? false))
               _labourRemoveList(context, msg.labourList!, cubit),
 
-            if (msg.spareList?.isNotEmpty ?? false)
+            if (isActive && (msg.spareList?.isNotEmpty ?? false))
               _spareRemoveList(context, msg.spareList!, cubit),
 
-            if (msg.showSkip)
+            if (isActive && msg.showSkip)
               TextButton(
-                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
                 onPressed: cubit.skip,
                 child: const Text("Skip this field"),
               ),
@@ -337,6 +342,18 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
         ),
       ),
     );
+  }
+
+  bool _isActiveMessage(List<ChatMessage> messages, int index) {
+    final msg = messages[index];
+    return index == messages.length - 1 && _hasInteractiveContent(msg);
+  }
+
+  bool _hasInteractiveContent(ChatMessage msg) {
+    return (msg.options?.isNotEmpty ?? false) ||
+        (msg.labourList?.isNotEmpty ?? false) ||
+        (msg.spareList?.isNotEmpty ?? false) ||
+        msg.showSkip;
   }
 
   Widget _jobContextCard(BuildContext context, String display) {
@@ -751,52 +768,72 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
   ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: labours.map((l) {
-        return Container(
-          margin: const EdgeInsets.only(top: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l['labour_name'].toString(),
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    Text(
-                      "₹${l['amount'] ?? '-'}",
-                      style: const TextStyle(color: Colors.grey, fontSize: 13),
-                    ),
-                  ],
+      children: [
+        ...labours.map((l) {
+          return Container(
+            margin: const EdgeInsets.only(top: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.red),
-                tooltip: "Remove",
-                onPressed: () => _confirmRemoveLabour(
-                  context,
-                  cubit,
-                  l['id'] as int,
-                  l['labour_name'].toString(),
+              ],
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        l['labour_name'].toString(),
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        "₹${l['amount'] ?? '-'}",
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  tooltip: "Remove",
+                  onPressed: () => _confirmRemoveLabour(
+                    context,
+                    cubit,
+                    l['id'] as int,
+                    l['labour_name'].toString(),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+        _backToActionsButton(cubit),
+      ],
+    );
+  }
+
+  Widget _backToActionsButton(JobAssistantCubit cubit) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: OutlinedButton.icon(
+        onPressed: () {
+          cubit.manageCubit?.backToActions(userLabel: "Back to Actions");
+          _scrollToBottom();
+        },
+        icon: const Icon(Icons.arrow_back_rounded, size: 18),
+        label: const Text("Back to actions"),
+      ),
     );
   }
 
@@ -836,49 +873,55 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
   ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: spares.map((s) {
-        final name = (s['part_name'] ?? s['name'] ?? '').toString();
-        return Container(
-          margin: const EdgeInsets.only(top: 6),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    Text(
-                      "Qty ${s['quantity'] ?? '-'} • ₹${s['amount'] ?? '-'}",
-                      style: const TextStyle(color: Colors.grey, fontSize: 13),
-                    ),
-                  ],
+      children: [
+        ...spares.map((s) {
+          final name = (s['part_name'] ?? s['name'] ?? '').toString();
+          return Container(
+            margin: const EdgeInsets.only(top: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.red),
-                tooltip: "Remove",
-                onPressed: () =>
-                    _confirmRemoveSpare(context, cubit, s['id'] as int, name),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
+              ],
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        "Qty ${s['quantity'] ?? '-'} • ₹${s['amount'] ?? '-'}",
+                        style: const TextStyle(
+                          color: Colors.grey,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  tooltip: "Remove",
+                  onPressed: () =>
+                      _confirmRemoveSpare(context, cubit, s['id'] as int, name),
+                ),
+              ],
+            ),
+          );
+        }),
+        _backToActionsButton(cubit),
+      ],
     );
   }
 
@@ -1032,10 +1075,38 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
                 ),
               ],
             ),
+            if (_canShowBackToActions(cubit))
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () {
+                    cubit.manageCubit?.backToActions();
+                    setState(() {
+                      _labourSuggestions = [];
+                      _spareSuggestions = [];
+                    });
+                    _ctrl.clear();
+                    _scrollToBottom();
+                  },
+                  icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                  label: const Text("Back to actions"),
+                ),
+              ),
           ],
         ),
       ),
     );
+  }
+
+  bool _canShowBackToActions(JobAssistantCubit cubit) {
+    final step = cubit.manageCubit?.manageStep;
+    return cubit.isManaging &&
+        step != null &&
+        step != ManageStep.loadingList &&
+        step != ManageStep.showList &&
+        step != ManageStep.showActions &&
+        step != ManageStep.done &&
+        step != ManageStep.error;
   }
 
   bool _isLabourSearch(JobAssistantCubit cubit) {

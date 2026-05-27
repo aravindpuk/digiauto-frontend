@@ -32,21 +32,28 @@ class LoginCubit extends Cubit<LoginState> {
         emit(LoginSuccess(body['message'] as String, garageId, branchId));
       } else {
         final failedState = state.copyWith(isLoading: false);
-        emit(LoginFailure(
-          result['body']['message'] as String? ?? 'Invalid credentials',
-          failedState,
-        ));
+        emit(
+          LoginFailure(
+            result['body']['message'] as String? ?? 'Invalid credentials',
+            failedState,
+          ),
+        );
       }
     } catch (_) {
       final failedState = state.copyWith(isLoading: false);
-      emit(LoginFailure('Something went wrong. Please try again.', failedState));
+      emit(
+        LoginFailure('Something went wrong. Please try again.', failedState),
+      );
     }
   }
 
   Future<void> isUserLoggedIn() async {
     try {
       final token = await getToken();
-      if (token != null && token.isNotEmpty) emit(Authenticated());
+      if (token == null || token.isEmpty) return;
+      final garageId = await getGarageId();
+      final branchId = await getBranchId();
+      emit(LoginSuccess('', garageId, branchId)); // reuse existing state
     } catch (_) {}
   }
 

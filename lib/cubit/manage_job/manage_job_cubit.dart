@@ -18,7 +18,9 @@ enum ManageStep {
   addSpareSearch,
   addSpareSelectFromResults,
   addSpareEnterQuantity,
-  addSpareEnterMrp,
+  // MRP step split into two:
+  addSpareConfirmMrp, // stock price found → show it, ask confirm or edit
+  addSpareEnterMrp, // no stock price OR user chose to edit → type MRP
   removeSpare,
   done,
   error,
@@ -34,6 +36,8 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
   ManageStep manageStep = ManageStep.loadingList;
   bool isBusy = false;
   bool hasChanges = false;
+  List<Map<String, dynamic>> _jobs = [];
+  final Map<int, Map<String, dynamic>> _jobDetails = {};
 
   // selected job
   int? selectedJobId;
@@ -63,6 +67,8 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
   String? pendingSpareName;
   bool pendingSpareIsNew = false;
   int? pendingSpareQuantity;
+  String? pendingSpareStockMrp; // MRP from stock (null = not in stock)
+  bool pendingSpareHasStockPrice = false; // true = stock price exists, lock MRP
 
   // spare remove
   List<Map<String, dynamic>> existingSpares = [];
@@ -85,7 +91,7 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     if (manageStep == ManageStep.addSpareEnterQuantity) {
       return "Enter quantity";
     }
-    if (manageStep == ManageStep.addSpareEnterMrp) return "Enter MRP";
+    if (manageStep == ManageStep.addSpareEnterMrp) return "Enter MRP (₹)";
     return "";
   }
 
@@ -95,29 +101,14 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     _bot("Fetching your job cards...");
     isBusy = true;
     try {
-      final jobs = await _service.fetchManageList();
+      _jobs = await _service.fetchManageList();
       isBusy = false;
-      if (jobs.isEmpty) {
+      if (_jobs.isEmpty) {
         _bot("No active job cards found.");
         manageStep = ManageStep.done;
         return;
       }
-      manageStep = ManageStep.showList;
-      emit([
-        ...state,
-        ChatMessage(
-          text: "Select a job card to manage:",
-          isUser: false,
-          options: jobs
-              .map(
-                (j) =>
-                    "${j['job_id']} • ${j['vehicle_number']} (${j['status']})",
-              )
-              .toList(),
-          optionStyle: "jobCards",
-          step: 10,
-        ),
-      ]);
+      showJobList();
     } catch (e) {
       isBusy = false;
       manageStep = ManageStep.error;
@@ -125,14 +116,40 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     }
   }
 
+  void showJobList() {
+    if (_jobs.isEmpty) {
+      _bot("No active job cards found.");
+      manageStep = ManageStep.done;
+      return;
+    }
+    _resetActionState();
+    selectedJobId = null;
+    selectedJobDisplay = null;
+    selectedJobStatus = null;
+    selectedVehicleModelId = null;
+    selectedGarageId = null;
+    jobComplaints = [];
+    manageStep = ManageStep.showList;
+    emit([
+      ...state,
+      ChatMessage(
+        text: "Select a job card to manage:",
+        isUser: false,
+        options: _jobOptions(),
+        optionStyle: "jobCards",
+        step: 10,
+      ),
+    ]);
+  }
+
   // ── Job selected ───────────────────────────────────────────────────────────
 
   Future<void> selectJob(String display) async {
+    _user(display);
     isBusy = true;
     _bot("Loading job details...");
     try {
-      final jobs = await _service.fetchManageList();
-      final match = jobs.firstWhere(
+      final match = _jobs.firstWhere(
         (j) => display.startsWith(j['job_id'].toString()),
         orElse: () => {},
       );
@@ -147,7 +164,10 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
       selectedJobStatus = match['status'] as String;
 
       // Fetch detail to get complaints and vehicle model
-      final detail = await _service.fetchDetail(selectedJobId!);
+      final detail =
+          _jobDetails[selectedJobId!] ??
+          await _service.fetchDetail(selectedJobId!);
+      _jobDetails[selectedJobId!] = detail;
       isBusy = false;
 
       jobComplaints = List<Map<String, dynamic>>.from(
@@ -175,6 +195,7 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
         step: 11,
         optionStyle: "manageActions",
         options: [
+          "Change Job",
           if (st != "delivered") "Update Status",
           "Add Labour",
           "Remove Labour",
@@ -190,6 +211,11 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
   // ── Action selected ────────────────────────────────────────────────────────
 
   Future<void> selectAction(String action) async {
+    if (action == "Change Job") {
+      _user(action);
+      showJobList();
+      return;
+    }
     _user(action);
     switch (action) {
       case "Update Status":
@@ -234,7 +260,7 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
         text:
             "Current status: ${selectedJobStatus ?? 'pending'}\nNext status: $next\n\nAre you sure?",
         isUser: false,
-        options: const ["Yes, Update", "Cancel"],
+        options: const ["Yes, Update", "Back to Actions"],
         step: 12,
       ),
     ]);
@@ -242,9 +268,7 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
 
   Future<void> confirmStatusUpdate(bool confirmed) async {
     if (!confirmed) {
-      _user("Cancel");
-      manageStep = ManageStep.showActions;
-      _showActionOptions();
+      backToActions(userLabel: "Back to Actions");
       return;
     }
     _user("Yes, Update");
@@ -254,6 +278,7 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
       final newStatus = await _service.updateStatus(selectedJobId!);
       isBusy = false;
       selectedJobStatus = newStatus;
+      _updateCachedSelectedStatus(newStatus);
       hasChanges = true;
       _bot('✅ Status updated to "$newStatus" successfully.');
     } catch (e) {
@@ -274,7 +299,7 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
         text:
             "⚠️ Are you sure you want to delete $selectedJobDisplay?\nThis cannot be undone.",
         isUser: false,
-        options: const ["Yes, Delete", "Cancel"],
+        options: const ["Yes, Delete", "Back to Actions"],
         step: 12,
       ),
     ]);
@@ -282,9 +307,7 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
 
   Future<void> confirmDelete(bool confirmed) async {
     if (!confirmed) {
-      _user("Cancel");
-      manageStep = ManageStep.showActions;
-      _showActionOptions();
+      backToActions(userLabel: "Back to Actions");
       return;
     }
     _user("Yes, Delete");
@@ -294,6 +317,8 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
       await _service.deleteJobCard(selectedJobId!);
       isBusy = false;
       hasChanges = true;
+      _jobs.removeWhere((j) => j['id'] == selectedJobId);
+      _jobDetails.remove(selectedJobId);
       _bot("✅ Job card deleted successfully.");
       manageStep = ManageStep.done;
     } catch (e) {
@@ -322,14 +347,20 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
       ChatMessage(
         text: "Which service is this labour for?",
         isUser: false,
-        options: jobComplaints.map((c) => c['text'].toString()).toList(),
+        options: [
+          "Back to Actions",
+          ...jobComplaints.map((c) => c['text'].toString()),
+        ],
         step: 13,
       ),
     ]);
   }
 
-  // Called when user taps a complaint chip
   void selectComplaint(String text) {
+    if (text == "Back to Actions") {
+      backToActions(userLabel: text);
+      return;
+    }
     final match = jobComplaints.firstWhere(
       (c) => c['text'].toString() == text,
       orElse: () => {'id': null, 'text': text},
@@ -355,7 +386,6 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     return labourSearchResults;
   }
 
-  // Called from handleTextInput when step == addLabourSearch
   Future<void> _handleLabourSearch(String query) async {
     _user(query);
     try {
@@ -369,7 +399,6 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     }
 
     if (labourSearchResults.isEmpty) {
-      // Labour doesn't exist — treat typed text as new labour name
       pendingLabourId = null;
       pendingLabourName = query;
       pendingLabourSuggestedPrice = null;
@@ -379,30 +408,31 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
         '"$query" is not in the system yet.\nEnter the amount (₹) to add it:',
       );
     } else {
-      // Show results as chips
       manageStep = ManageStep.addLabourSelectFromResults;
-      final options =
-          labourSearchResults.map((l) => l['name'].toString()).toList()
-            ..add('➕ Add "$query" as new');
       emit([
         ...state,
         ChatMessage(
           text: "Select a matching labour:",
           isUser: false,
-          options: options,
+          options: [
+            "Back to Actions",
+            ...labourSearchResults.map((l) => l['name'].toString()),
+            '➕ Add "$query" as new',
+          ],
           step: 14,
         ),
       ]);
     }
   }
 
-  // ── Add Labour — Step 3a: user selects from results ────────────────────────
-
   void selectLabourFromResults(String option) {
+    if (option == "Back to Actions") {
+      backToActions(userLabel: option);
+      return;
+    }
     _user(option);
 
     if (option.startsWith("➕ Add")) {
-      // New labour — extract name
       final name = option
           .replaceFirst(RegExp(r'^➕ Add "'), '')
           .replaceAll(RegExp(r'".*$'), '');
@@ -415,7 +445,6 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
       return;
     }
 
-    // Existing labour selected
     final match = labourSearchResults.firstWhere(
       (l) => l['name'].toString() == option,
       orElse: () => {},
@@ -427,7 +456,6 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     pendingLabourSuggestedPrice = match['suggested_price'] as String?;
     pendingLabourIsNew = false;
 
-    // ── Step 3b: show suggested price, let user confirm or edit ───────────
     manageStep = ManageStep.addLabourConfirmPrice;
 
     if (pendingLabourSuggestedPrice != null) {
@@ -438,6 +466,7 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
               "Labour: $pendingLabourName\nSuggested price: ₹$pendingLabourSuggestedPrice\n\nUse this price or enter a different one?",
           isUser: false,
           options: [
+            "Back to Actions",
             "Use ₹$pendingLabourSuggestedPrice",
             "Enter Different Price",
           ],
@@ -445,7 +474,6 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
         ),
       ]);
     } else {
-      // No price in DB — go straight to entry
       manageStep = ManageStep.addLabourEnterPrice;
       _bot(
         "$pendingLabourName selected.\nNo default price found. Enter the amount (₹):",
@@ -453,20 +481,19 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     }
   }
 
-  // Called when user taps "Use ₹XXX" or "Enter Different Price"
   Future<void> handlePriceConfirmOption(String option) async {
+    if (option == "Back to Actions") {
+      backToActions(userLabel: option);
+      return;
+    }
     _user(option);
     if (option.startsWith("Use ₹")) {
-      // Confirm suggested price directly
       await _submitLabour(pendingLabourSuggestedPrice!);
     } else {
-      // Ask user to type a price
       manageStep = ManageStep.addLabourEnterPrice;
       _bot("Enter the amount (₹):");
     }
   }
-
-  // ── Add Labour — Step 4: price typed ──────────────────────────────────────
 
   Future<void> _handlePriceInput(String input) async {
     if (double.tryParse(input) == null) {
@@ -476,8 +503,6 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     _user(input);
     await _submitLabour(input);
   }
-
-  // ── Submit labour ─────────────────────────────────────────────────────────
 
   Future<void> _submitLabour(String amount) async {
     isBusy = true;
@@ -504,7 +529,7 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     _showActionOptions();
   }
 
-  // ── Add Spare ─────────────────────────────────────────────────────────────
+  // ── Add Spare ──────────────────────────────────────────────────────────────
 
   void _startAddSpare() {
     _resetSpareState();
@@ -522,13 +547,20 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
       ChatMessage(
         text: "Which service is this spare for?",
         isUser: false,
-        options: jobComplaints.map((c) => c['text'].toString()).toList(),
+        options: [
+          "Back to Actions",
+          ...jobComplaints.map((c) => c['text'].toString()),
+        ],
         step: 16,
       ),
     ]);
   }
 
   void selectSpareComplaint(String text) {
+    if (text == "Back to Actions") {
+      backToActions(userLabel: text);
+      return;
+    }
     final match = jobComplaints.firstWhere(
       (c) => c['text'].toString() == text,
       orElse: () => {'id': null, 'text': text},
@@ -560,28 +592,35 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
       pendingSpareId = null;
       pendingSpareName = query;
       pendingSpareIsNew = true;
+      pendingSpareStockMrp = null;
+      pendingSpareHasStockPrice = false;
       manageStep = ManageStep.addSpareEnterQuantity;
       _bot('"$query" is not in the system yet. Enter quantity:');
     } else {
       manageStep = ManageStep.addSpareSelectFromResults;
-      final options =
-          spareSearchResults
-              .map((s) => (s['partname'] ?? s['name']).toString())
-              .toList()
-            ..add('Add "$query" as new');
       emit([
         ...state,
         ChatMessage(
           text: "Select a matching spare:",
           isUser: false,
-          options: options,
+          options: [
+            "Back to Actions",
+            ...spareSearchResults.map(
+              (s) => (s['partname'] ?? s['name']).toString(),
+            ),
+            'Add "$query" as new',
+          ],
           step: 17,
         ),
       ]);
     }
   }
 
-  void selectSpareFromResults(String option) {
+  Future<void> selectSpareFromResults(String option) async {
+    if (option == "Back to Actions") {
+      backToActions(userLabel: option);
+      return;
+    }
     _user(option);
 
     if (option.startsWith("Add ")) {
@@ -591,6 +630,8 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
       pendingSpareId = null;
       pendingSpareName = name;
       pendingSpareIsNew = true;
+      pendingSpareStockMrp = null;
+      pendingSpareHasStockPrice = false;
       manageStep = ManageStep.addSpareEnterQuantity;
       _bot('"$name" is not in the system yet. Enter quantity:');
       return;
@@ -605,8 +646,20 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     pendingSpareId = match['id'] as int;
     pendingSpareName = (match['partname'] ?? match['name']).toString();
     pendingSpareIsNew = false;
+
+    // Look up stock price in background
+    _bot("$pendingSpareName selected. Checking stock price...");
+    try {
+      final stockMrp = await _service.fetchSpareMrpFromStock(pendingSpareId!);
+      pendingSpareStockMrp = stockMrp;
+      pendingSpareHasStockPrice = stockMrp != null;
+    } catch (_) {
+      pendingSpareStockMrp = null;
+      pendingSpareHasStockPrice = false;
+    }
+
     manageStep = ManageStep.addSpareEnterQuantity;
-    _bot("$pendingSpareName selected. Enter quantity:");
+    _bot("Enter quantity:");
   }
 
   Future<void> _handleSpareQuantityInput(String input) async {
@@ -617,8 +670,51 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     }
     pendingSpareQuantity = quantity;
     _user(input);
-    manageStep = ManageStep.addSpareEnterMrp;
-    _bot("Enter MRP for one item:");
+
+    // ── MRP decision ───────────────────────────────────────────────────────
+    if (pendingSpareHasStockPrice && pendingSpareStockMrp != null) {
+      // Stock price exists → show it, let user confirm or override
+      final mrp = pendingSpareStockMrp!;
+      final total = (double.tryParse(mrp) ?? 0) * quantity;
+      manageStep = ManageStep.addSpareConfirmMrp;
+      emit([
+        ...state,
+        ChatMessage(
+          text:
+              "Stock MRP: ₹$mrp\n"
+              "Quantity: $quantity\n"
+              "Total: ₹${total.toStringAsFixed(2)}\n\n"
+              "Proceed with this MRP?",
+          isUser: false,
+          options: const [
+            "Back to Actions",
+            "Yes, Proceed",
+            "Enter Different MRP",
+          ],
+          step: 17,
+        ),
+      ]);
+    } else {
+      // Not in stock → must enter MRP manually
+      manageStep = ManageStep.addSpareEnterMrp;
+      _bot("No stock price found. Enter MRP for one item (₹):");
+    }
+  }
+
+  Future<void> handleSpareMrpConfirmOption(String option) async {
+    if (option == "Back to Actions") {
+      backToActions(userLabel: option);
+      return;
+    }
+    _user(option);
+    if (option.startsWith("Yes")) {
+      // Use stock MRP directly
+      await _submitSpare(pendingSpareStockMrp!);
+    } else {
+      // Let user type a custom MRP
+      manageStep = ManageStep.addSpareEnterMrp;
+      _bot("Enter MRP for one item (₹):");
+    }
   }
 
   Future<void> _handleSpareMrpInput(String input) async {
@@ -632,6 +728,8 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
 
   Future<void> _submitSpare(String mrp) async {
     isBusy = true;
+    final total = ((double.tryParse(mrp) ?? 0) * (pendingSpareQuantity ?? 1))
+        .toStringAsFixed(2);
     _bot("Adding spare...");
     try {
       final result = await _service.addSpare(
@@ -645,8 +743,8 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
       isBusy = false;
       hasChanges = true;
       _bot(
-        '"${result['part_name']}" x${result['quantity']} '
-        '(₹${result['amount']}) added for "$selectedComplaintText".',
+        '✅ "${result['part_name']}" x${result['quantity']} '
+        '(₹$mrp each • Total ₹$total) added for "$selectedComplaintText".',
       );
     } catch (e) {
       isBusy = false;
@@ -656,7 +754,7 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     _showActionOptions();
   }
 
-  // ── Remove Labour ─────────────────────────────────────────────────────────
+  // ── Remove Labour ──────────────────────────────────────────────────────────
 
   Future<void> _startRemoveLabour() async {
     isBusy = true;
@@ -711,7 +809,7 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     _showActionOptions();
   }
 
-  // ── Remove Spare ──────────────────────────────────────────────────────────
+  // ── Remove Spare ───────────────────────────────────────────────────────────
 
   Future<void> _startRemoveSpare() async {
     isBusy = true;
@@ -790,6 +888,17 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     }
   }
 
+  void backToActions({String? userLabel}) {
+    if (selectedJobId == null) {
+      showJobList();
+      return;
+    }
+    if (userLabel != null) _user(userLabel);
+    _resetActionState();
+    manageStep = ManageStep.showActions;
+    _showActionOptions();
+  }
+
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   void _resetLabourState() {
@@ -809,7 +918,31 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     pendingSpareName = null;
     pendingSpareIsNew = false;
     pendingSpareQuantity = null;
+    pendingSpareStockMrp = null;
+    pendingSpareHasStockPrice = false;
     spareSearchResults = [];
+  }
+
+  void _resetActionState() {
+    _resetLabourState();
+    _resetSpareState();
+    existingLabours = [];
+    existingSpares = [];
+  }
+
+  List<String> _jobOptions() {
+    return _jobs
+        .map((j) => "${j['job_id']} • ${j['vehicle_number']} (${j['status']})")
+        .toList();
+  }
+
+  void _updateCachedSelectedStatus(String status) {
+    for (final job in _jobs) {
+      if (job['id'] == selectedJobId) {
+        job['status'] = status;
+        return;
+      }
+    }
   }
 
   void _bot(String text, {List<String>? options, int step = 0}) {

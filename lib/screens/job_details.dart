@@ -1,6 +1,7 @@
 import 'package:digiauto/models/job_card.dart';
 import 'package:digiauto/services/jobcard_service.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class JobDetailsPage extends StatefulWidget {
   const JobDetailsPage({super.key, required this.job});
@@ -13,6 +14,7 @@ class JobDetailsPage extends StatefulWidget {
 
 class _JobDetailsPageState extends State<JobDetailsPage> {
   late Future<JobCard> _detailFuture;
+  bool _isOpeningDocument = false;
 
   @override
   void initState() {
@@ -62,6 +64,8 @@ class _JobDetailsPageState extends State<JobDetailsPage> {
                 const SizedBox(height: 12),
                 _billingSummary(job),
                 const SizedBox(height: 12),
+                _documentAction(job),
+                const SizedBox(height: 12),
                 _serviceBreakdown(job),
               ],
             ),
@@ -69,6 +73,126 @@ class _JobDetailsPageState extends State<JobDetailsPage> {
         );
       },
     );
+  }
+
+  Widget _documentAction(JobCard job) {
+    final status = job.status.toLowerCase();
+    final isDelivered = status == "delivered";
+    final isInvoice = status == "completed";
+    final canCreateDocument =
+        !isDelivered &&
+        (isInvoice || job.labourServices.isNotEmpty || job.spares.isNotEmpty);
+    final title = isDelivered
+        ? "Document Closed"
+        : isInvoice
+        ? "Invoice"
+        : "Quotation";
+    final helper = isDelivered
+        ? "Delivered job. Invoice and quotation downloads are closed."
+        : isInvoice
+        ? "Completed job. Invoice PDF is ready."
+        : canCreateDocument
+        ? "Estimate PDF is ready from added labour and spares."
+        : "Add at least one labour or spare item to create a quotation.";
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _box(),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF1E8),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.picture_as_pdf_outlined,
+              color: Color(0xFFFF5733),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF17384C),
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  helper,
+                  style: const TextStyle(
+                    color: Color(0xFF667985),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          FilledButton.icon(
+            onPressed: canCreateDocument && !_isOpeningDocument
+                ? () => _openDocument(job)
+                : null,
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF2E7BA6),
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: const Color(0xFFD4DEE4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            icon: _isOpeningDocument
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.download_rounded, size: 18),
+            label: Text(_isOpeningDocument ? "Opening" : "Download"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _openDocument(JobCard job) async {
+    setState(() => _isOpeningDocument = true);
+    try {
+      final uri = await JobcardService().documentDownloadUri(job.id);
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched && mounted) {
+        _showMessage("Unable to open document download.");
+      }
+    } catch (error) {
+      if (mounted) {
+        _showMessage(error.toString().replaceFirst("Exception: ", ""));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isOpeningDocument = false);
+      }
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Widget _jobHeader(JobCard job) {

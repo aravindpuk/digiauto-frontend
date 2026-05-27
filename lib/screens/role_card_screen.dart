@@ -1,6 +1,7 @@
 import 'package:digiauto/cubit/login/login_cubit.dart';
 import 'package:digiauto/cubit/login/login_state.dart';
 import 'package:digiauto/screens/customer_login.dart';
+import 'package:digiauto/screens/garage.dart';
 import 'package:digiauto/screens/home.dart';
 import 'package:digiauto/screens/login.dart';
 import 'package:flutter/material.dart';
@@ -33,11 +34,18 @@ class RoleSelectionState extends State<RoleSelectionScreen> {
 
     return BlocListener<LoginCubit, LoginState>(
       listener: (context, state) {
-        if (state is Authenticated) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => HomeScreen()),
-          );
+        if (state is LoginSuccess) {
+          if (state.garageId == null) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const GarageProvider()),
+            );
+          } else {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const HomeScreen()),
+            );
+          }
         }
       },
       child: Scaffold(

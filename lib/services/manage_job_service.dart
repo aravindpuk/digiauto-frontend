@@ -92,6 +92,30 @@ class ManageJobService {
     );
   }
 
+  /// Fetch stock list for the branch and find the MRP for a specific spare.
+  /// Returns null if no stock entry exists for this spare in the branch.
+  Future<String?> fetchSpareMrpFromStock(int spareId) async {
+    final branchId = await getBranchId();
+    if (branchId == null) return null;
+
+    final uri = Uri.parse(baseUrl + ApiEndpoints.spareList(branchId));
+    final res = await http.get(uri, headers: await _headers());
+    if (res.statusCode < 200 || res.statusCode >= 300) return null;
+
+    final List<dynamic> stocks = jsonDecode(res.body) as List;
+    for (final stock in stocks) {
+      if (stock is Map<String, dynamic>) {
+        final spare = stock['spare'] as Map?;
+        final id = spare?['id'];
+        if (id != null && id.toString() == spareId.toString()) {
+          final mrp = stock['mrp'];
+          if (mrp != null) return mrp.toString();
+        }
+      }
+    }
+    return null; // spare not in stock — user must enter MRP manually
+  }
+
   Future<Map<String, dynamic>> addLabour({
     required int jobcardId,
     int? labourId,

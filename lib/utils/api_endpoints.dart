@@ -8,6 +8,7 @@ class ApiEndpoints {
 
   static const String jobCards = "/jobcard/jobcards/";
   static String jobCardDetail(int id) => "/jobcard/jobcards/$id/";
+  static String jobCardDocument(int id) => "/jobcard/jobcards/$id/document/";
   static const String manageJobs = "/jobcard/manage/";
 
   static const String labourSearch = "/labour/search/";

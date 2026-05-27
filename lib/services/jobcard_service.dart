@@ -78,6 +78,20 @@ class JobcardService {
     throw Exception('Invalid job details response');
   }
 
+  Future<Uri> documentDownloadUri(String jobcardId) async {
+    final id = int.tryParse(jobcardId);
+    if (id == null) {
+      throw Exception('Invalid job card id');
+    }
+    final token = await getToken();
+    if (token == null || token.isEmpty) {
+      throw Exception('Login token not found');
+    }
+    return Uri.parse(
+      baseUrl + ApiEndpoints.jobCardDocument(id),
+    ).replace(queryParameters: {'token': token});
+  }
+
   Future<JobCard> updateJobCard({
     required String jobcardId,
     required String vehicleNumber,
