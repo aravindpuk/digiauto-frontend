@@ -1,4 +1,4 @@
-package com.example.digiauto
+package com.digiauto
 
 import io.flutter.embedding.android.FlutterActivity
 

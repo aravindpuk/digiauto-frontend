@@ -1,6 +1,7 @@
 import 'package:digiauto/cubit/user/user_cubit.dart';
 import 'package:digiauto/cubit/user/user_state.dart';
 import 'package:digiauto/custom_widgets/scaffold_messenger.dart';
+import 'package:digiauto/custom_widgets/loading_button.dart';
 import 'package:digiauto/screens/login.dart';
 import 'package:digiauto/services/auth_service.dart';
 import 'package:digiauto/utils/enums.dart';
@@ -222,39 +223,17 @@ class UserRegister extends StatelessWidget {
                             width: double.infinity,
                             child: BlocBuilder<UserCubit, UserState>(
                               builder: (context, state) {
-                                bool enabled = state.isValid;
-                                if (state.isLoading) {
-                                  return CircularProgressIndicator();
-                                }
-                                return ElevatedButton(
-                                  onPressed: enabled
+                                return LoadingButton(
+                                  label: "Register",
+                                  isLoading: state.isLoading,
+                                  onPressed: state.isValid
                                       ? () {
                                           context
                                               .read<UserCubit>()
                                               .registerUser(role: role.name);
                                         }
                                       : null,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: secondaryColor,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 16,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    elevation: 6,
-                                    shadowColor: primaryColor.withValues(
-                                      alpha: 0.4,
-                                    ),
-                                  ),
-                                  child: const Text(
-                                    "Register",
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
+                                  backgroundColor: secondaryColor,
                                 );
                               },
                             ),

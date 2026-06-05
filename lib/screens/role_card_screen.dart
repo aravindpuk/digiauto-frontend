@@ -113,7 +113,8 @@ class RoleSelectionState extends State<RoleSelectionScreen> {
                                           Navigator.push(
                                             context,
                                             MaterialPageRoute(
-                                              builder: (_) => CustomerLogin(),
+                                              builder: (_) =>
+                                                  const CustomerLogin(),
                                             ),
                                           );
                                         },
@@ -158,7 +159,8 @@ class RoleSelectionState extends State<RoleSelectionScreen> {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (_) => CustomerLogin(),
+                                            builder: (_) =>
+                                                const CustomerLogin(),
                                           ),
                                         );
                                       },

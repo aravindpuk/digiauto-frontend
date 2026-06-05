@@ -1,6 +1,7 @@
 import 'package:digiauto/cubit/garage/garage_cubit.dart';
 import 'package:digiauto/cubit/garage/garage_state.dart';
 import 'package:digiauto/custom_widgets/scaffold_messenger.dart';
+import 'package:digiauto/custom_widgets/loading_button.dart';
 import 'package:digiauto/screens/home.dart';
 import 'package:digiauto/screens/maps.dart';
 import 'package:digiauto/services/garage_service.dart';
@@ -200,43 +201,15 @@ class _GarageScreenState extends State<GarageScreen> {
                           // Register button — driven by state.isValid
                           BlocBuilder<GarageCubit, GarageState>(
                             builder: (context, state) {
-                              if (state.isLoading) {
-                                return const Center(
-                                  child: CircularProgressIndicator(),
-                                );
-                              }
-                              return SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton(
-                                  onPressed: state.isValid
-                                      ? () => context
-                                            .read<GarageCubit>()
-                                            .registerGarage()
-                                      : null,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: secondaryColor,
-                                    disabledBackgroundColor: secondaryColor
-                                        .withValues(alpha: 0.4),
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 16,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    elevation: 6,
-                                    shadowColor: primaryColor.withValues(
-                                      alpha: 0.4,
-                                    ),
-                                  ),
-                                  child: const Text(
-                                    "Register",
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
+                              return LoadingButton(
+                                label: "Register",
+                                isLoading: state.isLoading,
+                                onPressed: state.isValid
+                                    ? () => context
+                                          .read<GarageCubit>()
+                                          .registerGarage()
+                                    : null,
+                                backgroundColor: secondaryColor,
                               );
                             },
                           ),

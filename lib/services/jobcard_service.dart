@@ -18,6 +18,30 @@ class JobcardService {
 
   // ─── Fetch Jobs ───────────────────────────────────────────────────────────
 
+  Future<JobCard?> fetchLatestCustomerJob(String vehicleNumber) async {
+    final uri = Uri.parse(baseUrl + ApiEndpoints.customerLatestJobCard).replace(
+      queryParameters: {'vehicle_number': vehicleNumber.trim().toUpperCase()},
+    );
+    final response = await http.get(
+      uri,
+      headers: {"Accept": "application/json"},
+    );
+
+    if (response.statusCode == 404) return null;
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Could not load the latest job card. Please try again.');
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is Map<String, dynamic>) {
+      final jobcardData = decoded['jobcard'] ?? decoded;
+      if (jobcardData is Map<String, dynamic>) {
+        return JobCard.fromJson(jobcardData);
+      }
+    }
+    throw Exception('Invalid job card response');
+  }
+
   Future<List<JobCard>> fetchJobs() async {
     final garageId = await getGarageId();
     final branchId = await getBranchId();

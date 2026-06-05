@@ -1,6 +1,7 @@
 import 'package:digiauto/cubit/login/login_cubit.dart';
 import 'package:digiauto/cubit/login/login_state.dart';
 import 'package:digiauto/custom_widgets/scaffold_messenger.dart';
+import 'package:digiauto/custom_widgets/loading_button.dart';
 import 'package:digiauto/screens/garage.dart';
 import 'package:digiauto/screens/home.dart';
 import 'package:digiauto/screens/register.dart';
@@ -14,7 +15,7 @@ class LoginScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final primaryColor   = Theme.of(context).primaryColor;
+    final primaryColor = Theme.of(context).primaryColor;
     final secondaryColor = Theme.of(context).colorScheme.secondary;
 
     return BlocListener<LoginCubit, LoginState>(
@@ -58,37 +59,38 @@ class LoginScreen extends StatelessWidget {
                   Align(
                     alignment: Alignment.bottomRight,
                     child: Container(
-                      width:  MediaQuery.of(context).size.width  * 0.85,
+                      width: MediaQuery.of(context).size.width * 0.85,
                       height: MediaQuery.of(context).size.height * 0.65,
                       decoration: const BoxDecoration(
                         color: Color(0xFFF8F9FA),
                         borderRadius: BorderRadius.only(
-                          topLeft:    Radius.circular(60),
+                          topLeft: Radius.circular(60),
                           bottomLeft: Radius.circular(60),
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color:       Color.fromARGB(66, 1, 77, 96),
-                            blurRadius:  10,
+                            color: Color.fromARGB(66, 1, 77, 96),
+                            blurRadius: 10,
                             spreadRadius: 12,
-                            offset:      Offset(-8, 4),
+                            offset: Offset(-8, 4),
                           ),
                         ],
                       ),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 32, vertical: 40),
+                        horizontal: 32,
+                        vertical: 40,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment:  MainAxisAlignment.center,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
                             "Login",
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyLarge
+                            style: Theme.of(context).textTheme.bodyLarge
                                 ?.copyWith(
-                                    fontSize: 24,
-                                    fontWeight: FontWeight.bold),
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                ),
                           ),
                           const SizedBox(height: 40),
 
@@ -96,13 +98,13 @@ class LoginScreen extends StatelessWidget {
                           TextField(
                             keyboardType: TextInputType.phone,
                             inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly
+                              FilteringTextInputFormatter.digitsOnly,
                             ],
                             decoration: _inputDecoration(
                               context,
                               label: "Mobile Number",
-                              icon:  Icons.phone,
-                              primaryColor:   primaryColor,
+                              icon: Icons.phone,
+                              primaryColor: primaryColor,
                               secondaryColor: secondaryColor,
                             ),
                             onChanged: (v) =>
@@ -113,16 +115,16 @@ class LoginScreen extends StatelessWidget {
                           // PIN
                           TextField(
                             obscureText: true,
-                            maxLength:   4,
+                            maxLength: 4,
                             keyboardType: TextInputType.number,
                             inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly
+                              FilteringTextInputFormatter.digitsOnly,
                             ],
                             decoration: _inputDecoration(
                               context,
                               label: "4-Digit PIN",
-                              icon:  Icons.lock,
-                              primaryColor:   primaryColor,
+                              icon: Icons.lock,
+                              primaryColor: primaryColor,
                               secondaryColor: secondaryColor,
                               counterText: "",
                             ),
@@ -134,36 +136,13 @@ class LoginScreen extends StatelessWidget {
                           // Button
                           BlocBuilder<LoginCubit, LoginState>(
                             builder: (context, state) {
-                              if (state.isLoading) {
-                                return const Center(
-                                    child: CircularProgressIndicator());
-                              }
-                              return SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton(
-                                  onPressed: state.isValid
-                                      ? () =>
-                                          context.read<LoginCubit>().login()
-                                      : null,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: secondaryColor,
-                                    disabledBackgroundColor:
-                                        secondaryColor.withValues(alpha: 0.4),
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 16),
-                                    shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(12)),
-                                    elevation: 6,
-                                  ),
-                                  child: const Text(
-                                    "Login",
-                                    style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold),
-                                  ),
-                                ),
+                              return LoadingButton(
+                                label: "Login",
+                                isLoading: state.isLoading,
+                                onPressed: state.isValid
+                                    ? () => context.read<LoginCubit>().login()
+                                    : null,
+                                backgroundColor: secondaryColor,
                               );
                             },
                           ),
@@ -172,16 +151,20 @@ class LoginScreen extends StatelessWidget {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              const Text("Don't have an account? ",
-                                  style: TextStyle(
-                                      color: Color(0xFF7F8C8D),
-                                      fontSize: 15)),
+                              const Text(
+                                "Don't have an account? ",
+                                style: TextStyle(
+                                  color: Color(0xFF7F8C8D),
+                                  fontSize: 15,
+                                ),
+                              ),
                               TextButton(
                                 onPressed: () => Navigator.pushReplacement(
                                   context,
                                   MaterialPageRoute(
                                     builder: (_) => const UserProvider(
-                                        role: userType.admin),
+                                      role: userType.admin,
+                                    ),
                                   ),
                                 ),
                                 style: TextButton.styleFrom(
@@ -190,11 +173,14 @@ class LoginScreen extends StatelessWidget {
                                   tapTargetSize:
                                       MaterialTapTargetSize.shrinkWrap,
                                 ),
-                                child: const Text('Sign Up',
-                                    style: TextStyle(
-                                        color: Color(0xFF2E7BA6),
-                                        fontSize: 15,
-                                        fontWeight: FontWeight.bold)),
+                                child: const Text(
+                                  'Sign Up',
+                                  style: TextStyle(
+                                    color: Color(0xFF2E7BA6),
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
                             ],
                           ),
