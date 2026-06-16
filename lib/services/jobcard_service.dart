@@ -102,7 +102,7 @@ class JobcardService {
     throw Exception('Invalid job details response');
   }
 
-  Future<Uri> documentDownloadUri(String jobcardId) async {
+  Future<Uri> documentViewUri(String jobcardId) async {
     final id = int.tryParse(jobcardId);
     if (id == null) {
       throw Exception('Invalid job card id');
@@ -112,8 +112,25 @@ class JobcardService {
       throw Exception('Login token not found');
     }
     return Uri.parse(
-      baseUrl + ApiEndpoints.jobCardDocument(id),
+      baseUrl + ApiEndpoints.jobCardView(id),
     ).replace(queryParameters: {'token': token});
+  }
+
+  Future<String> shareToWhatsApp(String jobcardId) async {
+    final id = int.tryParse(jobcardId);
+    if (id == null) {
+      throw Exception('Invalid job card id');
+    }
+    final response = await http.post(
+      Uri.parse(baseUrl + ApiEndpoints.jobCardShareWhatsApp(id)),
+      headers: await _headers(),
+    );
+    final decoded = jsonDecode(response.body);
+    final message = decoded is Map ? decoded['message']?.toString() : null;
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(message ?? 'Failed to share (${response.statusCode})');
+    }
+    return message ?? 'Shared successfully.';
   }
 
   Future<JobCard> updateJobCard({

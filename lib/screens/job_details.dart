@@ -15,6 +15,7 @@ class JobDetailsPage extends StatefulWidget {
 class _JobDetailsPageState extends State<JobDetailsPage> {
   late Future<JobCard> _detailFuture;
   bool _isOpeningDocument = false;
+  bool _isSharing = false;
 
   @override
   void initState() {
@@ -88,11 +89,11 @@ class _JobDetailsPageState extends State<JobDetailsPage> {
         ? "Invoice"
         : "Quotation";
     final helper = isDelivered
-        ? "Delivered job. Invoice and quotation downloads are closed."
+        ? "Delivered job. Invoice and quotation are closed."
         : isInvoice
-        ? "Completed job. Invoice PDF is ready."
+        ? "Completed job. Tap to view the invoice."
         : canCreateDocument
-        ? "Estimate PDF is ready from added labour and spares."
+        ? "Tap to view the quotation in your browser."
         : "Add at least one labour or spare item to create a quotation.";
 
     return Container(
@@ -108,7 +109,7 @@ class _JobDetailsPageState extends State<JobDetailsPage> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(
-              Icons.picture_as_pdf_outlined,
+              Icons.receipt_long_outlined,
               color: Color(0xFFFF5733),
             ),
           ),
@@ -136,10 +137,22 @@ class _JobDetailsPageState extends State<JobDetailsPage> {
               ],
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
+          if (canCreateDocument)
+            IconButton(
+              tooltip: "Share to WhatsApp",
+              onPressed: _isSharing ? null : () => _shareToWhatsApp(job),
+              icon: _isSharing
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.share_outlined, color: Color(0xFF25D366)),
+            ),
           FilledButton.icon(
             onPressed: canCreateDocument && !_isOpeningDocument
-                ? () => _openDocument(job)
+                ? () => _viewDocument(job)
                 : null,
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFF2E7BA6),
@@ -159,24 +172,24 @@ class _JobDetailsPageState extends State<JobDetailsPage> {
                       color: Colors.white,
                     ),
                   )
-                : const Icon(Icons.download_rounded, size: 18),
-            label: Text(_isOpeningDocument ? "Opening" : "Download"),
+                : const Icon(Icons.open_in_new_rounded, size: 18),
+            label: Text(_isOpeningDocument ? "Opening" : "View"),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _openDocument(JobCard job) async {
+  Future<void> _viewDocument(JobCard job) async {
     setState(() => _isOpeningDocument = true);
     try {
-      final uri = await JobcardService().documentDownloadUri(job.id);
+      final uri = await JobcardService().documentViewUri(job.id);
       final launched = await launchUrl(
         uri,
         mode: LaunchMode.externalApplication,
       );
       if (!launched && mounted) {
-        _showMessage("Unable to open document download.");
+        _showMessage("Unable to open the document.");
       }
     } catch (error) {
       if (mounted) {
@@ -186,6 +199,20 @@ class _JobDetailsPageState extends State<JobDetailsPage> {
       if (mounted) {
         setState(() => _isOpeningDocument = false);
       }
+    }
+  }
+
+  Future<void> _shareToWhatsApp(JobCard job) async {
+    setState(() => _isSharing = true);
+    try {
+      final message = await JobcardService().shareToWhatsApp(job.id);
+      if (mounted) _showMessage(message);
+    } catch (error) {
+      if (mounted) {
+        _showMessage(error.toString().replaceFirst("Exception: ", ""));
+      }
+    } finally {
+      if (mounted) setState(() => _isSharing = false);
     }
   }
 

@@ -24,4 +24,7 @@ class ApiEndpoints {
       "/spare/stock/update/$stockId/";
   static String spareUpdate(int spareId) => "/spare/update/$spareId/";
   static String jobCardSpare(int jobcardId) => "/spare/jobcard/$jobcardId/";
+  static String jobCardView(int id) => "/jobcard/jobcards/$id/view/";
+  static String jobCardShareWhatsApp(int id) =>
+      "/jobcard/jobcards/$id/share-whatsapp/";
 }
