@@ -82,7 +82,7 @@ class JobAssistantCubit extends Cubit<List<ChatMessage>> {
       case customerNameStep:
         return "Customer name";
       case mobileStep:
-        return "Mobile number";
+        return "Whatsapp number";
       case placeStep:
         return "Place";
       case modelStep:
@@ -326,7 +326,7 @@ class JobAssistantCubit extends Cubit<List<ChatMessage>> {
         options: [
           "Edit Vehicle No",
           "Edit Customer",
-          "Edit Mobile",
+          "Edit Whatsapp number",
           "Edit Place",
           "Edit Model",
           "Edit Make",
@@ -645,7 +645,7 @@ class JobAssistantCubit extends Cubit<List<ChatMessage>> {
       options: [
         "Edit Vehicle No",
         "Edit Customer",
-        "Edit Mobile",
+        "Edit whatsapp number",
         "Edit Place",
         "Edit Model",
         "Edit Make",
@@ -669,7 +669,7 @@ class JobAssistantCubit extends Cubit<List<ChatMessage>> {
       case customerNameStep:
         return "Customer name?";
       case mobileStep:
-        return "Mobile number?";
+        return "Whatsapp number?";
       case placeStep:
         return "Place?";
       case modelStep:
@@ -698,7 +698,7 @@ class JobAssistantCubit extends Cubit<List<ChatMessage>> {
       case customerNameStep:
         return "customer name";
       case mobileStep:
-        return "mobile number";
+        return "whatsapp number";
       case placeStep:
         return "place";
       case modelStep:
@@ -726,7 +726,7 @@ class JobAssistantCubit extends Cubit<List<ChatMessage>> {
         return vehicleStep;
       case "Edit Customer":
         return customerNameStep;
-      case "Edit Mobile":
+      case "Edit whatsapp number":
         return mobileStep;
       case "Edit Place":
         return placeStep;
@@ -755,17 +755,17 @@ class JobAssistantCubit extends Cubit<List<ChatMessage>> {
     return [
       _isEditingExisting ? "📋 Edit Job Card" : "📋 Review Job Card",
       "",
-      "🚗  Vehicle No : ${answers[vehicleStep] ?? '-'}",
-      "👤  Customer   : ${answers[customerNameStep] ?? '-'}",
-      "📞  Mobile     : ${answers[mobileStep] ?? '-'}",
-      "📍  Place      : ${answers[placeStep] ?? '-'}",
-      "🏎   Model      : ${answers[modelStep] ?? '-'}",
-      "🔧  Make       : ${answers[makeStep] ?? '-'}",
-      "📅  Year       : ${answers[yearStep] ?? '-'}",
-      "🔩  Chassis    : ${chassis == null || chassis.isEmpty ? 'Skipped' : chassis}",
-      "⚙️   Engine     : ${engine == null || engine.isEmpty ? 'Skipped' : engine}",
-      "📏  KM         : ${answers[kilometerStep] ?? '-'}",
-      "🛠   Services   : ${services.isEmpty ? '-' : services.join(', ')}",
+      "Vehicle No : ${answers[vehicleStep] ?? '-'}",
+      "Customer   : ${answers[customerNameStep] ?? '-'}",
+      "Whatsapp   : ${answers[mobileStep] ?? '-'}",
+      "Place      : ${answers[placeStep] ?? '-'}",
+      "Model      : ${answers[modelStep] ?? '-'}",
+      "Make       : ${answers[makeStep] ?? '-'}",
+      "Year       : ${answers[yearStep] ?? '-'}",
+      "Chassis    : ${chassis == null || chassis.isEmpty ? 'Skipped' : chassis}",
+      "Engine     : ${engine == null || engine.isEmpty ? 'Skipped' : engine}",
+      "KM         : ${answers[kilometerStep] ?? '-'}",
+      "Services   : ${services.isEmpty ? '-' : services.join(', ')}",
     ].join("\n");
   }
 }

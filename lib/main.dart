@@ -1,5 +1,5 @@
 import 'package:digiauto/cubit/login/login_cubit.dart';
-import 'package:digiauto/screens/role_card_screen.dart';
+import 'package:digiauto/screens/login.dart';
 import 'package:digiauto/services/auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -14,6 +14,8 @@ void main() {
   );
 } // closes main
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -23,6 +25,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'DigiAuto',
       debugShowCheckedModeBanner: false,
+      navigatorKey: navigatorKey,
       theme: ThemeData(
         primaryColor: const Color(0xFF2E7BA6),
         scaffoldBackgroundColor: const Color(0xFFF8F9FA),
@@ -51,7 +54,7 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ), //closes themedata
-      home: RoleSelectionScreen(),
+      home: LoginScreen(),
     ); //closes materialapp
   } //closes vuild
 } // closes class

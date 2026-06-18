@@ -50,6 +50,7 @@ class LoginCubit extends Cubit<LoginState> {
   Future<void> isUserLoggedIn() async {
     try {
       final token = await getToken();
+
       if (token == null || token.isEmpty) return;
       final garageId = await getGarageId();
       final branchId = await getBranchId();

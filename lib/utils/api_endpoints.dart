@@ -27,4 +27,5 @@ class ApiEndpoints {
   static String jobCardView(int id) => "/jobcard/jobcards/$id/view/";
   static String jobCardShareWhatsApp(int id) =>
       "/jobcard/jobcards/$id/share-whatsapp/";
+  static const String jobcardReports = "/jobcard/reports/";
 }

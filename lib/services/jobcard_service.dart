@@ -4,6 +4,7 @@ import 'package:digiauto/models/job_card.dart';
 import 'package:digiauto/utils/api_endpoints.dart';
 import 'package:digiauto/utils/auth.dart';
 import 'package:digiauto/utils/base_url.dart';
+import 'package:digiauto/utils/session_manager.dart';
 import 'package:http/http.dart' as http;
 
 class JobcardService {
@@ -29,6 +30,7 @@ class JobcardService {
 
     if (response.statusCode == 404) return null;
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      SessionManager.handleExpiredSession();
       throw Exception('Could not load the latest job card. Please try again.');
     }
 
@@ -61,6 +63,7 @@ class JobcardService {
     final response = await http.get(uri, headers: await _headers());
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
+      SessionManager.handleExpiredSession();
       throw Exception('Failed to fetch jobs (${response.statusCode})');
     }
 
@@ -241,6 +244,7 @@ class JobcardService {
       // Try to extract server error message
       try {
         final err = jsonDecode(response.body);
+        SessionManager.handleExpiredSession();
         throw Exception(
           err['message'] ??
               'Failed to create job card (${response.statusCode})',
