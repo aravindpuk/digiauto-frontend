@@ -23,9 +23,9 @@ class GarageService {
     required double longitude,
   }) async {
     final body = jsonEncode({
-      "name":      garage,
-      "mobile":    mobile,
-      "latitude":  latitude,
+      "name": garage,
+      "mobile": mobile,
+      "latitude": latitude,
       "longitude": longitude,
       if (email.trim().isNotEmpty) "email": email.trim(),
     });
@@ -45,17 +45,75 @@ class GarageService {
       final rawBranchId = decoded['branch_id'];
 
       if (rawGarageId != null) {
-        await saveGarageId(rawGarageId is int
-            ? rawGarageId
-            : int.parse(rawGarageId.toString()));
+        await saveGarageId(
+          rawGarageId is int ? rawGarageId : int.parse(rawGarageId.toString()),
+        );
       }
       if (rawBranchId != null) {
-        await saveBranchId(rawBranchId is int
-            ? rawBranchId
-            : int.parse(rawBranchId.toString()));
+        await saveBranchId(
+          rawBranchId is int ? rawBranchId : int.parse(rawBranchId.toString()),
+        );
       }
     }
 
     return {'status': response.statusCode, 'body': decoded};
+  }
+
+  Future<Map<String, dynamic>> fetchProfile() async {
+    final response = await http.get(
+      Uri.parse(baseUrl + ApiEndpoints.garageProfile),
+      headers: await _headers(),
+    );
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(decoded['message']?.toString() ?? 'Profile not found.');
+    }
+    return decoded;
+  }
+
+  Future<Map<String, dynamic>> updateProfile({
+    required String adminName,
+    required String mobile,
+    required String garageName,
+    required String garageMobile,
+    required String email,
+    String currentPin = '',
+    String newPin = '',
+  }) async {
+    final response = await http.put(
+      Uri.parse(baseUrl + ApiEndpoints.garageProfile),
+      headers: await _headers(),
+      body: jsonEncode({
+        "admin_name": adminName,
+        "mobile": mobile,
+        "garage_name": garageName,
+        "garage_mobile": garageMobile,
+        "email": email,
+        if (newPin.trim().isNotEmpty) "current_pin": currentPin.trim(),
+        if (newPin.trim().isNotEmpty) "pin": newPin.trim(),
+      }),
+    );
+    final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        decoded['message']?.toString() ?? 'Profile update failed.',
+      );
+    }
+    return decoded;
+  }
+
+  Future<void> logout() async {
+    final response = await http.post(
+      Uri.parse(baseUrl + ApiEndpoints.logout),
+      headers: await _headers(),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      String message = 'Logout failed.';
+      try {
+        final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+        message = decoded['message']?.toString() ?? message;
+      } catch (_) {}
+      throw Exception(message);
+    }
   }
 }

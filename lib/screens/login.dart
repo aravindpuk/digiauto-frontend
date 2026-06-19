@@ -10,8 +10,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+  @override
+  State<LoginScreen> createState() => _LoginState();
+}
+
+class _LoginState extends State<LoginScreen> {
+  @override
+  void initState() {
+    super.initState();
+    context.read<LoginCubit>().isUserLoggedIn();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -196,30 +206,30 @@ class LoginScreen extends StatelessWidget {
       ),
     );
   }
+}
 
-  InputDecoration _inputDecoration(
-    BuildContext context, {
-    required String label,
-    required IconData icon,
-    required Color primaryColor,
-    required Color secondaryColor,
-    String? counterText,
-  }) {
-    return InputDecoration(
-      filled: true,
-      fillColor: Colors.white,
-      labelText: label,
-      counterText: counterText,
-      labelStyle: Theme.of(context).textTheme.bodySmall,
-      enabledBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: primaryColor),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderSide: BorderSide(color: primaryColor, width: 2),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      prefixIcon: Icon(icon, color: secondaryColor),
-    );
-  }
+InputDecoration _inputDecoration(
+  BuildContext context, {
+  required String label,
+  required IconData icon,
+  required Color primaryColor,
+  required Color secondaryColor,
+  String? counterText,
+}) {
+  return InputDecoration(
+    filled: true,
+    fillColor: Colors.white,
+    labelText: label,
+    counterText: counterText,
+    labelStyle: Theme.of(context).textTheme.bodySmall,
+    enabledBorder: OutlineInputBorder(
+      borderSide: BorderSide(color: primaryColor),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderSide: BorderSide(color: primaryColor, width: 2),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    prefixIcon: Icon(icon, color: secondaryColor),
+  );
 }

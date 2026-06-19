@@ -4,6 +4,7 @@ class ApiEndpoints {
   static const String logout = "/user/logout/";
 
   static const String registerGarage = "/garages/register/";
+  static const String garageProfile = "/garages/profile/";
   static String garageBranches(int garageId) => "/garages/$garageId/branches/";
 
   static const String jobCards = "/jobcard/jobcards/";
@@ -14,6 +15,7 @@ class ApiEndpoints {
 
   static const String labourSearch = "/labour/search/";
   static const String labourCreate = "/labour/create/";
+  static String labourUpdate(int id) => "/labour/update/$id/";
   static String jobCardLabour(int jobcardId) => "/labour/jobcard/$jobcardId/";
 
   static const String spares = "/spare/spare-create";

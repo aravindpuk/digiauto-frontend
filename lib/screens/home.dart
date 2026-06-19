@@ -2,7 +2,9 @@ import 'package:animated_bottom_navigation_bar/animated_bottom_navigation_bar.da
 import 'package:digiauto/custom_widgets/assistant_button.dart';
 import 'package:digiauto/models/job_card.dart';
 import 'package:digiauto/screens/job_details.dart';
+import 'package:digiauto/screens/labour.dart';
 import 'package:digiauto/screens/reports.dart';
+import 'package:digiauto/screens/settings.dart';
 import 'package:digiauto/screens/spare.dart';
 import 'package:digiauto/services/jobcard_service.dart';
 import 'package:flutter/material.dart';
@@ -27,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen>
 
   final iconList = [
     Icons.build_circle,
+    Icons.engineering,
     Icons.bar_chart_rounded,
     Icons.settings,
   ];
@@ -377,7 +380,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget animatedBottomNavigation() {
-    const labels = ["Spares", "Reports", "Settings"];
+    const labels = ["Spares", "Labour", "Reports", "Settings"];
 
     return AnimatedBottomNavigationBar.builder(
       itemCount: iconList.length,
@@ -410,11 +413,20 @@ class _HomeScreenState extends State<HomeScreen>
         if (index == 1) {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => const ReportScreen()),
+            MaterialPageRoute(builder: (_) => const LabourForm()),
           );
         }
         if (index == 2) {
-          // Handle settings navigation
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ReportScreen()),
+          );
+        }
+        if (index == 3) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const SettingsScreen()),
+          );
         }
       },
       backgroundColor: secondaryColor.withValues(alpha: 0.95),
