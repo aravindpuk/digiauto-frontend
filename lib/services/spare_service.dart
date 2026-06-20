@@ -56,7 +56,9 @@ class SpareService {
   }
 
   Future<List<Map<String, dynamic>>> listStock(int branchId) async {
-    final uri = Uri.parse(baseUrl + ApiEndpoints.spareList(branchId));
+    final uri = Uri.parse(
+      baseUrl + ApiEndpoints.spareList(branchId),
+    ).replace(queryParameters: {'include_zero': '1'});
     final res = await http.get(uri, headers: await _headers());
     _check(res);
     return List<Map<String, dynamic>>.from(jsonDecode(res.body) as List);

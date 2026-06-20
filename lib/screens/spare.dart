@@ -115,21 +115,24 @@ class _SpareFormState extends State<SpareForm> {
     final mrp = _mrpCtrl.text.trim();
     final purchaseRate = _purchaseRateCtrl.text.trim();
 
-    if (_selectedStockId == null || _selectedSpareId == null) {
-      _showMessage("Select a spare stock item to edit.", isError: true);
+    if (_selectedSpareId == null) {
+      _showMessage("Search and select a spare to edit.", isError: true);
       return;
     }
     if (partName.isEmpty) {
       _showMessage("Enter spare name.", isError: true);
       return;
     }
-    if (quantity == null || quantity <= 0) {
-      _showMessage("Enter a valid quantity.", isError: true);
-      return;
-    }
-    if (double.tryParse(mrp) == null || double.tryParse(purchaseRate) == null) {
-      _showMessage("Enter valid MRP and purchase rate.", isError: true);
-      return;
+    if (_selectedStockId != null) {
+      if (quantity == null || quantity < 0) {
+        _showMessage("Enter a valid quantity.", isError: true);
+        return;
+      }
+      if (double.tryParse(mrp) == null ||
+          double.tryParse(purchaseRate) == null) {
+        _showMessage("Enter valid MRP and purchase rate.", isError: true);
+        return;
+      }
     }
 
     setState(() {
@@ -138,19 +141,26 @@ class _SpareFormState extends State<SpareForm> {
     });
 
     try {
-      await _service.updateSpare(
+      final updatedSpare = await _service.updateSpare(
         spareId: _selectedSpareId!,
         partName: partName,
         partNumber: _partNumberCtrl.text.trim(),
       );
-      await _service.updateStock(
-        stockId: _selectedStockId!,
-        quantity: quantity,
-        mrp: mrp,
-        purchaseAmount: purchaseRate,
-      );
+      _selectedSpareId = updatedSpare['id'] as int? ?? _selectedSpareId;
+      if (_selectedStockId != null) {
+        await _service.updateStock(
+          stockId: _selectedStockId!,
+          quantity: quantity!,
+          mrp: mrp,
+          purchaseAmount: purchaseRate,
+        );
+      }
       await _loadStock();
-      _showMessage("Spare stock updated.");
+      _showMessage(
+        _selectedStockId == null
+            ? "Spare details updated."
+            : "Spare stock updated.",
+      );
     } catch (e) {
       _showMessage(e.toString().replaceAll('Exception: ', ''), isError: true);
     } finally {
@@ -244,10 +254,7 @@ class _SpareFormState extends State<SpareForm> {
 
     Map<String, dynamic> stock = {};
     if (_isEditMode) {
-      stock = _stockItems.firstWhere((item) {
-        final itemSpare = item['spare'] as Map?;
-        return itemSpare?['id'] == spareId;
-      }, orElse: () => {});
+      stock = _stockForSpareId(spareId);
 
       if (stock.isEmpty) {
         setState(() {
@@ -262,8 +269,7 @@ class _SpareFormState extends State<SpareForm> {
           _suggestions = [];
         });
         _showMessage(
-          "No stock found for this spare in your branch.",
-          isError: true,
+          "No stock details found. You can update the spare name and part number.",
         );
         return;
       }
@@ -283,6 +289,18 @@ class _SpareFormState extends State<SpareForm> {
       _suggestions = [];
       _message = null;
     });
+  }
+
+  Map<String, dynamic> _stockForSpareId(int spareId) {
+    return _stockItems.firstWhere((item) {
+      final itemSpare = item['spare'] as Map?;
+      return itemSpare?['id'] == spareId;
+    }, orElse: () => {});
+  }
+
+  String _fieldValue(Object? value) {
+    if (value == null) return '';
+    return value.toString();
   }
 
   void _setMode(bool editMode) {
@@ -425,7 +443,7 @@ class _SpareFormState extends State<SpareForm> {
                             child: CircularProgressIndicator(strokeWidth: 2),
                           ),
                         )
-                      : _selectedStockId == null
+                      : _selectedSpareId == null
                       ? const Icon(Icons.search)
                       : const Icon(Icons.check_circle, color: Colors.green)
                 : _selectedSpareId == null
@@ -448,11 +466,22 @@ class _SpareFormState extends State<SpareForm> {
                 final name = (spare['partname'] ?? spare['name'] ?? '')
                     .toString();
                 final partNumber = spare['partnumber']?.toString() ?? '';
+                final stock = _isEditMode && _selectedSpareId == null
+                    ? _stockForSpareId(spare['id'] as int? ?? -1)
+                    : <String, dynamic>{};
+                final subtitle = _isEditMode
+                    ? [
+                        "Part No: $partNumber",
+                        "MRP: ${_fieldValue(stock['mrp'])}",
+                        "Purchase Rate: ${_fieldValue(stock['purchase_amount'])}",
+                        "Qty: ${_fieldValue(stock['quantity'])}",
+                      ].join("  |  ")
+                    : partNumber;
                 return ListTile(
                   dense: true,
                   leading: const Icon(Icons.build_circle_outlined),
                   title: Text(name),
-                  subtitle: partNumber.isEmpty ? null : Text(partNumber),
+                  subtitle: subtitle.isEmpty ? null : Text(subtitle),
                   onTap: () => _selectSpare(spare),
                 );
               }).toList(),

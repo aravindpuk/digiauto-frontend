@@ -142,10 +142,11 @@ class _LabourFormState extends State<LabourForm> {
   }
 
   void _selectLabour(Map<String, dynamic> labour) {
+    final cost = labour['suggested_price'] ?? labour['cost'];
     setState(() {
       _selectedLabourId = labour['id'] as int?;
       _nameCtrl.text = (labour['name'] ?? '').toString();
-      _costCtrl.text = (labour['suggested_price'] ?? '').toString();
+      _costCtrl.text = (cost ?? '').toString();
       _suggestions = [];
       _message = null;
     });
@@ -326,12 +327,17 @@ class _LabourFormState extends State<LabourForm> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: _suggestions.map((labour) {
                 final name = (labour['name'] ?? '').toString();
-                final price = labour['suggested_price']?.toString();
+                final price = (labour['suggested_price'] ?? labour['cost'])
+                    ?.toString();
                 return ListTile(
                   dense: true,
                   leading: const Icon(Icons.engineering_outlined),
                   title: Text(name),
-                  subtitle: price == null ? null : Text("Cost Rs $price"),
+                  subtitle: _isEditMode
+                      ? Text("Cost Rs ${price ?? ''}")
+                      : price == null
+                      ? null
+                      : Text("Cost Rs $price"),
                   onTap: () => _selectLabour(labour),
                 );
               }).toList(),
