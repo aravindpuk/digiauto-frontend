@@ -29,13 +29,20 @@ class _SpareFormState extends State<SpareForm> {
   bool _loadingStock = false;
   bool _searchingSpares = false;
   bool _saving = false;
+  bool _pricesAreTotal = false;
   String? _message;
   bool _isError = false;
 
   double get _totalPurchase {
     final quantity = int.tryParse(_quantityCtrl.text.trim()) ?? 0;
     final rate = double.tryParse(_purchaseRateCtrl.text.trim()) ?? 0;
-    return quantity * rate;
+    return _pricesAreTotal ? rate : quantity * rate;
+  }
+
+  String _unitRate(String enteredAmount, int quantity) {
+    final amount = double.parse(enteredAmount);
+    final rate = _pricesAreTotal ? amount / quantity : amount;
+    return rate.toStringAsFixed(2);
   }
 
   @override
@@ -96,8 +103,8 @@ class _SpareFormState extends State<SpareForm> {
         spareId: spare['id'] as int,
         branchId: branchId,
         quantity: quantity,
-        mrp: mrp,
-        purchaseAmount: purchaseRate,
+        mrp: _unitRate(mrp, quantity),
+        purchaseAmount: _unitRate(purchaseRate, quantity),
       );
 
       _clearForm();
@@ -128,6 +135,13 @@ class _SpareFormState extends State<SpareForm> {
         _showMessage("Enter a valid quantity.", isError: true);
         return;
       }
+      if (_pricesAreTotal && quantity == 0) {
+        _showMessage(
+          "Total price needs a quantity greater than zero.",
+          isError: true,
+        );
+        return;
+      }
       if (double.tryParse(mrp) == null ||
           double.tryParse(purchaseRate) == null) {
         _showMessage("Enter valid MRP and purchase rate.", isError: true);
@@ -151,8 +165,8 @@ class _SpareFormState extends State<SpareForm> {
         await _service.updateStock(
           stockId: _selectedStockId!,
           quantity: quantity!,
-          mrp: mrp,
-          purchaseAmount: purchaseRate,
+          mrp: _unitRate(mrp, quantity),
+          purchaseAmount: _unitRate(purchaseRate, quantity),
         );
       }
       await _loadStock();
@@ -197,6 +211,7 @@ class _SpareFormState extends State<SpareForm> {
     _quantityCtrl.clear();
     _mrpCtrl.clear();
     _purchaseRateCtrl.clear();
+    _pricesAreTotal = false;
     _suggestions = [];
   }
 
@@ -216,6 +231,7 @@ class _SpareFormState extends State<SpareForm> {
       _quantityCtrl.clear();
       _mrpCtrl.clear();
       _purchaseRateCtrl.clear();
+      _pricesAreTotal = false;
     }
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 280), () async {
@@ -285,6 +301,7 @@ class _SpareFormState extends State<SpareForm> {
         _quantityCtrl.text = (stock['quantity'] ?? '').toString();
         _mrpCtrl.text = (stock['mrp'] ?? '').toString();
         _purchaseRateCtrl.text = (stock['purchase_amount'] ?? '').toString();
+        _pricesAreTotal = false;
       }
       _suggestions = [];
       _message = null;
@@ -317,6 +334,7 @@ class _SpareFormState extends State<SpareForm> {
       _quantityCtrl.clear();
       _mrpCtrl.clear();
       _purchaseRateCtrl.clear();
+      _pricesAreTotal = false;
     });
     if (editMode) _loadStock();
   }
@@ -351,6 +369,9 @@ class _SpareFormState extends State<SpareForm> {
               label: "Part Number",
               hint: "Optional",
             ),
+            const SizedBox(height: 8),
+            _priceEntryMode(theme),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
@@ -366,7 +387,9 @@ class _SpareFormState extends State<SpareForm> {
                 Expanded(
                   child: _textField(
                     controller: _mrpCtrl,
-                    label: "MRP",
+                    label: _pricesAreTotal
+                        ? "Selling Amount (Total)"
+                        : "MRP / Unit",
                     keyboardType: TextInputType.number,
                   ),
                 ),
@@ -374,7 +397,9 @@ class _SpareFormState extends State<SpareForm> {
             ),
             _textField(
               controller: _purchaseRateCtrl,
-              label: "Purchase Rate",
+              label: _pricesAreTotal
+                  ? "Purchase Amount (Total)"
+                  : "Purchase Rate / Unit",
               keyboardType: TextInputType.number,
               onChanged: (_) => setState(() {}),
             ),
@@ -418,6 +443,39 @@ class _SpareFormState extends State<SpareForm> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _priceEntryMode(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text("Prices entered as", style: theme.textTheme.labelLarge),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          children: [
+            ChoiceChip(
+              label: const Text("Per Unit"),
+              selected: !_pricesAreTotal,
+              onSelected: (_) => setState(() => _pricesAreTotal = false),
+            ),
+            ChoiceChip(
+              label: const Text("Total for Quantity"),
+              selected: _pricesAreTotal,
+              onSelected: (_) => setState(() => _pricesAreTotal = true),
+            ),
+          ],
+        ),
+        if (_pricesAreTotal)
+          const Padding(
+            padding: EdgeInsets.only(top: 6),
+            child: Text(
+              "The total is divided by quantity and saved as the inventory unit rate.",
+              style: TextStyle(color: Colors.black54, fontSize: 12),
+            ),
+          ),
+      ],
     );
   }
 

@@ -69,6 +69,7 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
   int? pendingSpareQuantity;
   String? pendingSpareStockMrp; // MRP from stock (null = not in stock)
   bool pendingSpareHasStockPrice = false; // true = stock price exists, lock MRP
+  String pendingSparePriceMode = 'unit';
 
   // spare remove
   List<Map<String, dynamic>> existingSpares = [];
@@ -91,7 +92,7 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     if (manageStep == ManageStep.addSpareEnterQuantity) {
       return "Enter quantity";
     }
-    if (manageStep == ManageStep.addSpareEnterMrp) return "Enter MRP (₹)";
+    if (manageStep == ManageStep.addSpareEnterMrp) return "Enter price (₹)";
     return "";
   }
 
@@ -684,20 +685,21 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
               "Stock MRP: ₹$mrp\n"
               "Quantity: $quantity\n"
               "Total: ₹${total.toStringAsFixed(2)}\n\n"
-              "Proceed with this MRP?",
+              "Use this price, enter a different unit price, or enter one total amount?",
           isUser: false,
           options: const [
             "Back to Actions",
-            "Yes, Proceed",
-            "Enter Different MRP",
+            "Use Stock Price",
+            "Enter Price Per Unit",
+            "Enter Total Amount",
           ],
           step: 17,
         ),
       ]);
     } else {
-      // Not in stock → must enter MRP manually
-      manageStep = ManageStep.addSpareEnterMrp;
-      _bot("No stock price found. Enter MRP for one item (₹):");
+      // No stock price: choose unit price or one line total.
+      manageStep = ManageStep.addSpareConfirmMrp;
+      _askSparePriceMode();
     }
   }
 
@@ -707,29 +709,50 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
       return;
     }
     _user(option);
-    if (option.startsWith("Yes")) {
+    if (option == "Use Stock Price") {
       // Use stock MRP directly
       await _submitSpare(pendingSpareStockMrp!);
     } else {
-      // Let user type a custom MRP
+      pendingSparePriceMode = option == "Total Amount" ? "total" : "unit";
       manageStep = ManageStep.addSpareEnterMrp;
-      _bot("Enter MRP for one item (₹):");
+      _bot(
+        pendingSparePriceMode == "total"
+            ? "Enter the total amount for all $pendingSpareQuantity item(s) (₹):"
+            : "Enter price per item (₹):",
+      );
     }
   }
 
   Future<void> _handleSpareMrpInput(String input) async {
     if (double.tryParse(input) == null) {
-      _bot("Please enter a valid MRP (e.g. 450 or 350.50).");
+      _bot("Please enter a valid price (e.g. 450 or 350.50).");
       return;
     }
     _user(input);
-    await _submitSpare(input);
+    await _submitSpare(input, priceMode: pendingSparePriceMode);
   }
 
-  Future<void> _submitSpare(String mrp) async {
+  void _askSparePriceMode() {
+    emit([
+      ...state,
+      ChatMessage(
+        text:
+            "How would you like to enter the price?\n"
+            "Choose Total Amount for engine oil, brake oil, grease, or other consumables.",
+        isUser: false,
+        options: const ["Back to Actions", "Price Per Unit", "Total Amount"],
+        step: 17,
+      ),
+    ]);
+  }
+
+  Future<void> _submitSpare(String mrp, {String priceMode = 'unit'}) async {
     isBusy = true;
-    final total = ((double.tryParse(mrp) ?? 0) * (pendingSpareQuantity ?? 1))
-        .toStringAsFixed(2);
+    final total =
+        (priceMode == 'total'
+                ? (double.tryParse(mrp) ?? 0)
+                : (double.tryParse(mrp) ?? 0) * (pendingSpareQuantity ?? 1))
+            .toStringAsFixed(2);
     _bot("Adding spare...");
     try {
       final result = await _service.addSpare(
@@ -738,13 +761,14 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
         spareName: pendingSpareIsNew ? pendingSpareName : null,
         quantity: pendingSpareQuantity!,
         mrp: mrp,
+        priceMode: priceMode,
         complaintId: selectedComplaintId,
       );
       isBusy = false;
       hasChanges = true;
       _bot(
         '✅ "${result['part_name']}" x${result['quantity']} '
-        '(₹$mrp each • Total ₹$total) added for "$selectedComplaintText".',
+        '(${priceMode == 'total' ? 'Total ₹$total' : '₹$mrp each • Total ₹$total'}) added for "$selectedComplaintText".',
       );
     } catch (e) {
       isBusy = false;
@@ -920,6 +944,7 @@ class ManageJobCubit extends Cubit<List<ChatMessage>> {
     pendingSpareQuantity = null;
     pendingSpareStockMrp = null;
     pendingSpareHasStockPrice = false;
+    pendingSparePriceMode = 'unit';
     spareSearchResults = [];
   }
 

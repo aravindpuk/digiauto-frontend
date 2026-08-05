@@ -157,6 +157,7 @@ class ManageJobService {
     String? spareName,
     required int quantity,
     required String mrp,
+    String priceMode = 'unit',
     int? complaintId,
   }) async {
     final uri = Uri.parse(baseUrl + ApiEndpoints.jobCardSpare(jobcardId));
@@ -168,6 +169,7 @@ class ManageJobService {
         if (spareName != null) 'spare_name': spareName,
         'quantity': quantity,
         'mrp': mrp,
+        'price_mode': priceMode,
         if (complaintId != null) 'complaint_id': complaintId,
       }),
     );
