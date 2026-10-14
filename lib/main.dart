@@ -3,9 +3,15 @@ import 'package:digiauto/screens/login.dart';
 import 'package:digiauto/services/auth_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 // make sure you have this file
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(
     MultiBlocProvider(
       providers: [BlocProvider(create: (_) => LoginCubit(AuthService()))],

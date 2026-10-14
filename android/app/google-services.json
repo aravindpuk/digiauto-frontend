@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "236051394576",
+    "project_id": "digiauto-a9a4d",
+    "storage_bucket": "digiauto-a9a4d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:236051394576:android:1585d47b8ae5109f7f9a95",
+        "android_client_info": {
+          "package_name": "com.digiauto"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBBY18gVcAziPiiRKEER_8PvXEgiz76Z1M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

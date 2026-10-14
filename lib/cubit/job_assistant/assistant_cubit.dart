@@ -23,8 +23,8 @@ class JobAssistantCubit extends Cubit<List<ChatMessage>> {
   static const int customerNameStep = 2;
   static const int mobileStep = 3;
   static const int placeStep = 4;
-  static const int modelStep = 5;
-  static const int makeStep = 6;
+  static const int makeStep = 5;
+  static const int modelStep = 6;
   static const int yearStep = 7;
   static const int chassisStep = 8;
   static const int engineStep = 9;

@@ -29,18 +29,20 @@ class LoginSuccess extends LoginState {
   final String message;
   final int? garageId;
   final int? branchId;
-  LoginSuccess(this.message, this.garageId, this.branchId) : super();
+  final String? role;
+  LoginSuccess(this.message, this.garageId, this.branchId, [this.role])
+    : super();
 }
 
 class LoginFailure extends LoginState {
   final String message;
   LoginFailure(this.message, LoginState previous)
-      : super(
-          mobile: previous.mobile,
-          pin: previous.pin,
-          isValid: previous.isValid,
-          isLoading: false,
-        );
+    : super(
+        mobile: previous.mobile,
+        pin: previous.pin,
+        isValid: previous.isValid,
+        isLoading: false,
+      );
 }
 
 class Authenticated extends LoginState {}

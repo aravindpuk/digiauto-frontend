@@ -6,6 +6,7 @@ import 'package:digiauto/screens/labour.dart';
 import 'package:digiauto/screens/reports.dart';
 import 'package:digiauto/screens/settings.dart';
 import 'package:digiauto/screens/spare.dart';
+import 'package:digiauto/screens/customer_home.dart' show UsedSpareOrderScreen;
 import 'package:digiauto/services/jobcard_service.dart';
 import 'package:flutter/material.dart';
 
@@ -32,6 +33,7 @@ class _HomeScreenState extends State<HomeScreen>
     Icons.engineering,
     Icons.bar_chart_rounded,
     Icons.settings,
+    Icons.recycling_outlined,
   ];
 
   @override
@@ -380,7 +382,7 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget animatedBottomNavigation() {
-    const labels = ["Spares", "Labour", "Reports", "Settings"];
+    const labels = ["Spares", "Labour", "Reports", "Settings", "Order scrap"];
 
     return AnimatedBottomNavigationBar.builder(
       itemCount: iconList.length,
@@ -426,6 +428,12 @@ class _HomeScreenState extends State<HomeScreen>
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const SettingsScreen()),
+          );
+        }
+        if (index == 4) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const UsedSpareOrderScreen()),
           );
         }
       },

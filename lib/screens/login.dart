@@ -4,7 +4,10 @@ import 'package:digiauto/custom_widgets/scaffold_messenger.dart';
 import 'package:digiauto/custom_widgets/loading_button.dart';
 import 'package:digiauto/screens/garage.dart';
 import 'package:digiauto/screens/home.dart';
+import 'package:digiauto/screens/customer_home.dart';
+import 'package:digiauto/screens/spare_shop_home.dart';
 import 'package:digiauto/screens/register.dart';
+import 'package:digiauto/screens/digi_staff_home.dart';
 import 'package:digiauto/utils/enums.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -34,6 +37,27 @@ class _LoginState extends State<LoginScreen> {
           showSnackBar(context, state.message, SnackType.error);
         }
         if (state is LoginSuccess) {
+          if (state.role == 'digi-staff') {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const DigiStaffHomeScreen()),
+            );
+            return;
+          }
+          if (state.role == 'customer') {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const CustomerHomeScreen()),
+            );
+            return;
+          }
+          if (state.role == 'scrap-team') {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const SpareShopHomeScreen()),
+            );
+            return;
+          }
           // No garage yet → register garage first
           if (state.garageId == null) {
             Navigator.pushReplacement(
@@ -172,9 +196,7 @@ class _LoginState extends State<LoginScreen> {
                                 onPressed: () => Navigator.pushReplacement(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (_) => const UserProvider(
-                                      role: userType.admin,
-                                    ),
+                                    builder: (_) => const UserProvider(),
                                   ),
                                 ),
                                 style: TextButton.styleFrom(

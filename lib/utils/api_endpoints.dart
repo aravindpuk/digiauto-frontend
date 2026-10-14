@@ -4,11 +4,21 @@ class ApiEndpoints {
   static const String logout = "/user/logout/";
 
   static const String registerGarage = "/garages/register/";
+  static const String registerSpareShop = "/spare/shops/register/";
   static const String garageProfile = "/garages/profile/";
   static String garageBranches(int garageId) => "/garages/$garageId/branches/";
 
   static const String jobCards = "/jobcard/jobcards/";
   static const String customerLatestJobCard = "/jobcard/customer/latest/";
+  static const String customerUsedSpareRequests = "/spare/used-requests/";
+  static const String spareShopInventory = "/spare/shops/inventory/";
+  static String spareShopInventoryItem(int id) => "/spare/shops/inventory/$id/";
+  static const String spareShopOrders = "/spare/shops/orders/";
+  static String spareShopOrder(int id) => "/spare/shops/orders/$id/";
+  static const String digiStaffSpareOrders = "/spare/digi-staff/orders/";
+  static String forwardSpareOrder(int requestId) =>
+      "/spare/digi-staff/orders/$requestId/forward/";
+  static const String vehicleCatalog = "/vehicle/catalog/";
   static String jobCardDetail(int id) => "/jobcard/jobcards/$id/";
   static String jobCardDocument(int id) => "/jobcard/jobcards/$id/document/";
   static const String manageJobs = "/jobcard/manage/";

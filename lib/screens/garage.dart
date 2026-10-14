@@ -2,10 +2,11 @@ import 'package:digiauto/cubit/garage/garage_cubit.dart';
 import 'package:digiauto/cubit/garage/garage_state.dart';
 import 'package:digiauto/custom_widgets/scaffold_messenger.dart';
 import 'package:digiauto/custom_widgets/loading_button.dart';
-import 'package:digiauto/screens/home.dart';
+import 'package:digiauto/screens/login.dart';
 import 'package:digiauto/screens/maps.dart';
 import 'package:digiauto/services/garage_service.dart';
 import 'package:digiauto/utils/enums.dart';
+import 'package:digiauto/utils/auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -48,11 +49,14 @@ class _GarageScreenState extends State<GarageScreen> {
       listener: (context, state) {
         if (state is GarageSuccessState) {
           showSnackBar(context, state.message, SnackType.success);
-          Future.delayed(const Duration(milliseconds: 400), () {
+          Future.delayed(const Duration(milliseconds: 400), () async {
             if (!context.mounted) return;
-            Navigator.pushReplacement(
+            await clearSession();
+            if (!context.mounted) return;
+            Navigator.pushAndRemoveUntil(
               context,
-              MaterialPageRoute(builder: (_) => const HomeScreen()),
+              MaterialPageRoute(builder: (_) => const LoginScreen()),
+              (_) => false,
             );
           });
         }

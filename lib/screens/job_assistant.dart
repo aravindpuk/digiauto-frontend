@@ -5,6 +5,7 @@ import 'package:digiauto/cubit/manage_job/manage_job_cubit.dart';
 import 'package:digiauto/models/chat.dart';
 import 'package:digiauto/services/jobcard_service.dart';
 import 'package:digiauto/services/speech_text.dart';
+import 'package:digiauto/services/vehicle_catalog_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -26,6 +27,8 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
   List<Map<String, dynamic>> _labourSuggestions = [];
   Timer? _spareSearchDebounce;
   List<Map<String, dynamic>> _spareSuggestions = [];
+  List<Map<String, dynamic>> _vehicleMakes = [];
+  List<Map<String, dynamic>> _vehicleSuggestions = [];
   bool _allowPop = false;
 
   @override
@@ -35,6 +38,7 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
       service: JobcardService(),
       hasExistingJobs: widget.hasExistingJobs,
     )..start();
+    _loadVehicleCatalog();
   }
 
   @override
@@ -50,6 +54,24 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
   void _send() {
     final text = _ctrl.text.trim();
     if (text.isEmpty) return;
+    if (_isVehicleCatalogStep(_cubit)) {
+      final matches = _vehicleOptions(_cubit).any(
+        (item) => (item['name'] as String).toLowerCase() == text.toLowerCase(),
+      );
+      if (!matches) {
+        setState(
+          () => _vehicleSuggestions = _vehicleOptions(_cubit)
+              .where(
+                (item) => (item['name'] as String).toLowerCase().contains(
+                  text.toLowerCase(),
+                ),
+              )
+              .take(7)
+              .toList(),
+        );
+        return;
+      }
+    }
     if (_cubit.isCollectingServices || _cubit.isEditingServices) {
       _cubit.addService(text, fromUserInput: true);
     } else {
@@ -61,6 +83,91 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
     });
     _ctrl.clear();
     _scrollToBottom();
+  }
+
+  Future<void> _loadVehicleCatalog() async {
+    try {
+      final makes = await VehicleCatalogService().fetchMakes();
+      if (mounted) setState(() => _vehicleMakes = makes);
+    } catch (_) {}
+  }
+
+  bool _isVehicleCatalogStep(JobAssistantCubit cubit) {
+    final activeStep = cubit.editingStep ?? cubit.step;
+    return activeStep == JobAssistantCubit.makeStep ||
+        activeStep == JobAssistantCubit.modelStep;
+  }
+
+  List<Map<String, dynamic>> _vehicleOptions(JobAssistantCubit cubit) {
+    final activeStep = cubit.editingStep ?? cubit.step;
+    if (activeStep == JobAssistantCubit.makeStep) return _vehicleMakes;
+    final makeName = cubit.answers[JobAssistantCubit.makeStep]?.toLowerCase();
+    final make = _vehicleMakes.cast<Map<String, dynamic>?>().firstWhere(
+      (item) => (item?['name'] as String?)?.toLowerCase() == makeName,
+      orElse: () => null,
+    );
+    final models = make?['models'];
+    if (models is! List) return const [];
+    return models
+        .whereType<Map>()
+        .map((model) => Map<String, dynamic>.from(model))
+        .toList();
+  }
+
+  void _previewVehicleSuggestions(JobAssistantCubit cubit, String value) {
+    if (!_isVehicleCatalogStep(cubit)) return;
+    final query = value.trim().toLowerCase();
+    setState(() {
+      _vehicleSuggestions = query.isEmpty
+          ? []
+          : _vehicleOptions(cubit)
+                .where(
+                  (item) =>
+                      (item['name'] as String).toLowerCase().contains(query),
+                )
+                .take(7)
+                .toList();
+    });
+  }
+
+  Widget _vehicleSuggestionPanel(JobAssistantCubit cubit) {
+    final activeStep = cubit.editingStep ?? cubit.step;
+    final label = activeStep == JobAssistantCubit.makeStep
+        ? 'Select a make'
+        : 'Select a model';
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      constraints: const BoxConstraints(maxHeight: 210),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE0E8ED)),
+      ),
+      child: ListView(
+        shrinkWrap: true,
+        children: [
+          if (_vehicleSuggestions.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(
+                _vehicleMakes.isEmpty ? 'Loading vehicle catalog…' : label,
+              ),
+            ),
+          ..._vehicleSuggestions.map(
+            (item) => ListTile(
+              dense: true,
+              title: Text(item['name'] as String),
+              onTap: () {
+                _ctrl.text = item['name'] as String;
+                setState(() => _vehicleSuggestions = []);
+                _send();
+              },
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _scrollToBottom() {
@@ -1026,6 +1133,7 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
           children: [
             if (_labourSuggestions.isNotEmpty && _isLabourSearch(cubit))
               _labourSuggestionPanel(cubit),
+            if (_isVehicleCatalogStep(cubit)) _vehicleSuggestionPanel(cubit),
             if (_spareSuggestions.isNotEmpty && _isSpareSearch(cubit))
               _spareSuggestionPanel(cubit),
             Row(
@@ -1120,6 +1228,13 @@ class _JobAssistantScreenState extends State<JobAssistantScreen> {
   }
 
   void _onInputChanged(JobAssistantCubit cubit, String value) {
+    if (_isVehicleCatalogStep(cubit)) {
+      _previewVehicleSuggestions(cubit, value);
+      return;
+    }
+    if (_vehicleSuggestions.isNotEmpty) {
+      setState(() => _vehicleSuggestions = []);
+    }
     if (!_isLabourSearch(cubit) && !_isSpareSearch(cubit)) {
       if (_labourSuggestions.isNotEmpty) {
         setState(() => _labourSuggestions = []);
