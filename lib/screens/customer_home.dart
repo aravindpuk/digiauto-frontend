@@ -626,59 +626,193 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     final images = (order['images'] as List?) ?? const [];
     final assignments =
         (order['assignments'] as List?)?.whereType<Map>().toList() ?? const [];
+    final canManage = order['status'] == 'submitted';
     return _card(
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _iconBox(Icons.settings_outlined, const Color(0xFFEAF3F8), _primary),
-          const SizedBox(width: 13),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: _ink,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  year.isEmpty ? vehicle : '$vehicle · $year',
-                  style: const TextStyle(color: _muted, fontSize: 12),
-                ),
-                if (images.isNotEmpty)
-                  Text(
-                    '${images.length} photo${images.length == 1 ? '' : 's'} attached',
-                    style: const TextStyle(color: _muted, fontSize: 11),
-                  ),
-                const SizedBox(height: 8),
-                Text(
-                  _formatDate(order['created_at']?.toString()),
-                  style: const TextStyle(color: _muted, fontSize: 11),
-                ),
-                for (final assignment in assignments)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Text(
-                      '${assignment['shop_name'] ?? 'Spare shop'} · ${assignment['status'] ?? 'forwarded'}',
+          Row(
+            children: [
+              _iconBox(
+                Icons.settings_outlined,
+                const Color(0xFFEAF3F8),
+                _primary,
+              ),
+              const SizedBox(width: 13),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: _primary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                        color: _ink,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
+                    const SizedBox(height: 4),
+                    Text(
+                      year.isEmpty ? vehicle : '$vehicle · $year',
+                      style: const TextStyle(color: _muted, fontSize: 12),
+                    ),
+                    if (images.isNotEmpty)
+                      Text(
+                        '${images.length} photo${images.length == 1 ? '' : 's'} attached',
+                        style: const TextStyle(color: _muted, fontSize: 11),
+                      ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _formatDate(order['created_at']?.toString()),
+                      style: const TextStyle(color: _muted, fontSize: 11),
+                    ),
+                    for (final assignment in assignments)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          '${assignment['shop_name'] ?? 'Spare shop'} · ${assignment['status'] ?? 'forwarded'}',
+                          style: const TextStyle(
+                            color: _primary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              _statusPill((order['status'] ?? 'submitted').toString()),
+            ],
+          ),
+          if (images.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 72,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: images.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 8),
+                itemBuilder: (_, index) => ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    images[index].toString(),
+                    width: 72,
+                    height: 72,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) => const SizedBox(
+                      width: 72,
+                      child: Icon(Icons.broken_image_outlined),
+                    ),
                   ),
+                ),
+              ),
+            ),
+          ],
+          if (canManage) ...[
+            const Divider(height: 20),
+            Row(
+              children: [
+                TextButton.icon(
+                  onPressed: () => _editSpareRequest(order),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Edit request'),
+                ),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () => _cancelSpareRequest(order),
+                  icon: const Icon(Icons.cancel_outlined),
+                  label: const Text('Cancel'),
+                ),
               ],
             ),
-          ),
-          const SizedBox(width: 8),
-          _statusPill((order['status'] ?? 'submitted').toString()),
+          ],
         ],
       ),
     );
+  }
+
+  Future<void> _editSpareRequest(Map<String, dynamic> order) async {
+    final spare = TextEditingController(
+      text: order['spare_name']?.toString() ?? '',
+    );
+    final year = TextEditingController(
+      text: order['vehicle_year']?.toString() ?? '',
+    );
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit spare request'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              controller: spare,
+              decoration: const InputDecoration(labelText: 'Spare name'),
+            ),
+            TextFormField(
+              controller: year,
+              decoration: const InputDecoration(labelText: 'Vehicle year'),
+              keyboardType: TextInputType.number,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _spareService.updateRequest(order['id'] as int, {
+        'spare_name': spare.text,
+        'vehicle_year': year.text,
+      });
+      if (mounted) await _refresh();
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
+  Future<void> _cancelSpareRequest(Map<String, dynamic> order) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel this request?'),
+        content: const Text('This will remove the request from your orders.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep request'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Cancel request'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await _spareService.cancelRequest(order['id'] as int);
+      if (mounted) await _refresh();
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
   }
 
   Widget _emptyTab(String title, String message, IconData icon) {

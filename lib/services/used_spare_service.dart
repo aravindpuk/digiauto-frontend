@@ -64,4 +64,31 @@ class UsedSpareService {
     }
     return Map<String, dynamic>.from(decoded as Map);
   }
+
+  Future<void> updateRequest(int id, Map<String, String> fields) async {
+    final response = await http.patch(
+      Uri.parse('$baseUrl${ApiEndpoints.customerUsedSpareRequests}$id/'),
+      headers: {...await _headers(), 'Content-Type': 'application/json'},
+      body: jsonEncode(fields),
+    );
+    final decoded = jsonDecode(response.body);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        decoded is Map ? decoded['message'] : 'Could not update request.',
+      );
+    }
+  }
+
+  Future<void> cancelRequest(int id) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl${ApiEndpoints.customerUsedSpareRequests}$id/'),
+      headers: await _headers(),
+    );
+    final decoded = jsonDecode(response.body);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        decoded is Map ? decoded['message'] : 'Could not cancel request.',
+      );
+    }
+  }
 }

@@ -59,11 +59,7 @@ class _DigiStaffHomeScreenState extends State<DigiStaffHomeScreen> {
   }
 
   Future<void> _logout() async {
-    try {
-      await FirebaseMessaging.instance.unsubscribeFromTopic(
-        'digi-staff-spare-orders',
-      );
-    } catch (_) {}
+    // Keep the device subscribed so staff receive OS notifications while signed out.
     await clearSession();
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
