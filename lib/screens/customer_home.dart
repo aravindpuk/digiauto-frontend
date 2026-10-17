@@ -7,9 +7,109 @@ import 'package:digiauto/services/jobcard_service.dart';
 import 'package:digiauto/services/used_spare_service.dart';
 import 'package:digiauto/services/vehicle_catalog_service.dart';
 import 'package:digiauto/utils/auth.dart';
+import 'package:digiauto/utils/base_url.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+
+String _usedSpareImageUrl(dynamic image) {
+  final value = image is Map
+      ? image['url']?.toString() ?? ''
+      : image.toString();
+  final uri = Uri.tryParse(value);
+  if (uri == null || value.isEmpty) return '';
+  return uri.hasScheme ? value : Uri.parse(baseUrl).resolve(value).toString();
+}
+
+List<dynamic> _usedSparePhotos(Map<String, dynamic> order) {
+  final images = ((order['images'] as List?) ?? const []).toList();
+  final legacyUrl = order['image_url']?.toString() ?? '';
+  if (legacyUrl.isNotEmpty &&
+      !images.any((image) => _usedSpareImageUrl(image) == legacyUrl)) {
+    images.add({'id': null, 'url': legacyUrl, 'legacy': true});
+  }
+  return images;
+}
+
+void _openSparePhotoViewer(
+  BuildContext context,
+  List<dynamic> photos,
+  int initialIndex,
+) {
+  showDialog<void>(
+    context: context,
+    builder: (_) =>
+        _SparePhotoViewer(photos: photos, initialIndex: initialIndex),
+  );
+}
+
+class _SparePhotoViewer extends StatefulWidget {
+  const _SparePhotoViewer({required this.photos, required this.initialIndex});
+
+  final List<dynamic> photos;
+  final int initialIndex;
+
+  @override
+  State<_SparePhotoViewer> createState() => _SparePhotoViewerState();
+}
+
+class _SparePhotoViewerState extends State<_SparePhotoViewer> {
+  late final PageController _controller;
+  late int _index;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex;
+    _controller = PageController(initialPage: _index);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Dialog.fullscreen(
+    backgroundColor: Colors.black,
+    child: Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text('${_index + 1} / ${widget.photos.length}'),
+        actions: [
+          IconButton(
+            tooltip: 'Close photo',
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.close),
+          ),
+        ],
+      ),
+      body: PageView.builder(
+        controller: _controller,
+        itemCount: widget.photos.length,
+        onPageChanged: (index) => setState(() => _index = index),
+        itemBuilder: (context, index) => Center(
+          child: InteractiveViewer(
+            minScale: 0.8,
+            maxScale: 5,
+            child: Image.network(
+              _usedSpareImageUrl(widget.photos[index]),
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => const Icon(
+                Icons.broken_image_outlined,
+                color: Colors.white70,
+                size: 56,
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
 
 class CustomerHomeScreen extends StatefulWidget {
   const CustomerHomeScreen({super.key});
@@ -27,6 +127,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   final _spareService = UsedSpareService();
 
   int _selectedTab = 0;
+  final Set<int> _expandedOrderImages = {};
   late Future<JobCard?> _jobFuture;
   late Future<List<Map<String, dynamic>>> _ordersFuture;
 
@@ -623,10 +724,12 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     final vehicle =
         '${order['vehicle_make'] ?? ''} ${order['vehicle_model'] ?? ''}'.trim();
     final year = (order['vehicle_year'] ?? '').toString();
-    final images = (order['images'] as List?) ?? const [];
+    final images = _usedSparePhotos(order);
     final assignments =
         (order['assignments'] as List?)?.whereType<Map>().toList() ?? const [];
     final canManage = order['status'] == 'submitted';
+    final orderId = order['id'] as int;
+    final showImages = _expandedOrderImages.contains(orderId);
     return _card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -687,28 +790,52 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
             ],
           ),
           if (images.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            SizedBox(
-              height: 72,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: images.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 8),
-                itemBuilder: (_, index) => ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.network(
-                    images[index].toString(),
-                    width: 72,
-                    height: 72,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const SizedBox(
-                      width: 72,
-                      child: Icon(Icons.broken_image_outlined),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => setState(() {
+                  if (showImages) {
+                    _expandedOrderImages.remove(orderId);
+                  } else {
+                    _expandedOrderImages.add(orderId);
+                  }
+                }),
+                icon: Icon(
+                  showImages
+                      ? Icons.visibility_off_outlined
+                      : Icons.photo_library_outlined,
+                ),
+                label: Text(
+                  showImages ? 'Hide photos' : 'View photos (${images.length})',
+                ),
+              ),
+            ),
+            if (showImages)
+              SizedBox(
+                height: 72,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: images.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                  itemBuilder: (_, index) => InkWell(
+                    onTap: () => _openSparePhotoViewer(context, images, index),
+                    borderRadius: BorderRadius.circular(8),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        _usedSpareImageUrl(images[index]),
+                        width: 72,
+                        height: 72,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => const SizedBox(
+                          width: 72,
+                          child: Icon(Icons.broken_image_outlined),
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
           ],
           if (canManage) ...[
             const Divider(height: 20),
@@ -734,55 +861,17 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   }
 
   Future<void> _editSpareRequest(Map<String, dynamic> order) async {
-    final spare = TextEditingController(
-      text: order['spare_name']?.toString() ?? '',
-    );
-    final year = TextEditingController(
-      text: order['vehicle_year']?.toString() ?? '',
-    );
-    final ok = await showDialog<bool>(
+    final saved = await showModalBottomSheet<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit spare request'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextFormField(
-              controller: spare,
-              decoration: const InputDecoration(labelText: 'Spare name'),
-            ),
-            TextFormField(
-              controller: year,
-              decoration: const InputDecoration(labelText: 'Vehicle year'),
-              keyboardType: TextInputType.number,
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Save'),
-          ),
-        ],
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
+      builder: (_) =>
+          _EditUsedSpareRequestSheet(order: order, service: _spareService),
     );
-    if (ok != true) return;
-    try {
-      await _spareService.updateRequest(order['id'] as int, {
-        'spare_name': spare.text,
-        'vehicle_year': year.text,
-      });
-      if (mounted) await _refresh();
-    } catch (error) {
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(error.toString())));
-    }
+    if (saved == true && mounted) await _refresh();
   }
 
   Future<void> _cancelSpareRequest(Map<String, dynamic> order) async {
@@ -1582,11 +1671,643 @@ class UsedSpareOrderScreen extends StatelessWidget {
   const UsedSpareOrderScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Order used spare')),
-    body: _UsedSpareRequestForm(
-      service: UsedSpareService(),
-      onSubmitted: () => Navigator.of(context).pop(),
+  Widget build(BuildContext context) => DefaultTabController(
+    length: 2,
+    child: Scaffold(
+      appBar: AppBar(title: const Text('Used spares')),
+      body: Column(
+        children: [
+          Material(
+            color: Colors.white,
+            child: TabBar(
+              labelColor: const Color(0xFF2E7BA6),
+              unselectedLabelColor: const Color(0xFF71818B),
+              indicatorColor: const Color(0xFF2E7BA6),
+              tabs: const [
+                Tab(
+                  icon: Icon(Icons.add_circle_outline),
+                  text: 'Request spare',
+                ),
+                Tab(icon: Icon(Icons.receipt_long_outlined), text: 'My orders'),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                _UsedSpareRequestForm(
+                  service: UsedSpareService(),
+                  onSubmitted: () => Navigator.of(context).pop(),
+                ),
+                const GarageSpareOrdersScreen(),
+              ],
+            ),
+          ),
+        ],
+      ),
     ),
+  );
+}
+
+class GarageSpareOrdersScreen extends StatefulWidget {
+  const GarageSpareOrdersScreen({super.key});
+
+  @override
+  State<GarageSpareOrdersScreen> createState() =>
+      _GarageSpareOrdersScreenState();
+}
+
+class _GarageSpareOrdersScreenState extends State<GarageSpareOrdersScreen> {
+  final _service = UsedSpareService();
+  final Set<int> _expandedPhotos = {};
+  late Future<List<Map<String, dynamic>>> _orders;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  void _load() => _orders = _service.fetchMyRequests();
+
+  Future<void> _refresh() async {
+    setState(_load);
+    await _orders.then((_) {}, onError: (_) {});
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      FutureBuilder<List<Map<String, dynamic>>>(
+        future: _orders,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: const [
+                  SizedBox(height: 180),
+                  Center(
+                    child: Text('Could not load orders. Pull down to refresh.'),
+                  ),
+                ],
+              ),
+            );
+          }
+          final orders = snapshot.data ?? const <Map<String, dynamic>>[];
+          if (orders.isEmpty) {
+            return RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: const [
+                  SizedBox(height: 180),
+                  Center(child: Text('No spare requests yet.')),
+                ],
+              ),
+            );
+          }
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            child: ListView.separated(
+              padding: const EdgeInsets.all(16),
+              itemCount: orders.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
+              itemBuilder: (context, index) => _orderCard(orders[index]),
+            ),
+          );
+        },
+      );
+
+  Widget _orderCard(Map<String, dynamic> order) {
+    final images = _usedSparePhotos(order);
+    final orderId = order['id'] as int;
+    final showPhotos = _expandedPhotos.contains(orderId);
+    final assignments =
+        (order['assignments'] as List?)?.whereType<Map>().toList() ?? const [];
+    final editable = order['status'] == 'submitted';
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    (order['spare_name'] ?? '').toString().isEmpty
+                        ? 'Spare from photos'
+                        : order['spare_name'].toString(),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Chip(
+                  label: Text(
+                    (order['status'] ?? 'submitted')
+                        .toString()
+                        .replaceAll('_', ' ')
+                        .toUpperCase(),
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              '${order['vehicle_make']} ${order['vehicle_model']} ${order['vehicle_year'] ?? ''}',
+            ),
+            for (final assignment in assignments)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  '${assignment['shop_name'] ?? 'Spare shop'} · ${assignment['status_label'] ?? assignment['status']}',
+                ),
+              ),
+            if (images.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => setState(() {
+                    if (showPhotos) {
+                      _expandedPhotos.remove(orderId);
+                    } else {
+                      _expandedPhotos.add(orderId);
+                    }
+                  }),
+                  icon: Icon(
+                    showPhotos
+                        ? Icons.visibility_off_outlined
+                        : Icons.photo_library_outlined,
+                  ),
+                  label: Text(
+                    showPhotos
+                        ? 'Hide photos'
+                        : 'View photos (${images.length})',
+                  ),
+                ),
+              ),
+              if (showPhotos) ...[
+                SizedBox(
+                  height: 84,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: images.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemBuilder: (_, index) => InkWell(
+                      onTap: () =>
+                          _openSparePhotoViewer(context, images, index),
+                      borderRadius: BorderRadius.circular(9),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(9),
+                        child: Image.network(
+                          _usedSpareImageUrl(images[index]),
+                          width: 84,
+                          height: 84,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => Container(
+                            width: 84,
+                            color: const Color(0xFFF0F3F5),
+                            alignment: Alignment.center,
+                            child: const Icon(Icons.broken_image_outlined),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+            if (editable)
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton.icon(
+                    onPressed: () => _edit(order),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('Edit'),
+                  ),
+                  TextButton.icon(
+                    onPressed: () => _cancel(order),
+                    icon: const Icon(Icons.cancel_outlined),
+                    label: const Text('Cancel'),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _edit(Map<String, dynamic> order) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (_) =>
+          _EditUsedSpareRequestSheet(order: order, service: _service),
+    );
+    if (saved == true && mounted) await _refresh();
+  }
+
+  Future<void> _cancel(Map<String, dynamic> order) async {
+    final cancel = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel this spare order?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Cancel order'),
+          ),
+        ],
+      ),
+    );
+    if (cancel != true) return;
+    try {
+      await _service.cancelRequest(order['id'] as int);
+      if (mounted) await _refresh();
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+}
+
+class _EditUsedSpareRequestSheet extends StatefulWidget {
+  const _EditUsedSpareRequestSheet({
+    required this.order,
+    required this.service,
+  });
+
+  final Map<String, dynamic> order;
+  final UsedSpareService service;
+
+  @override
+  State<_EditUsedSpareRequestSheet> createState() =>
+      _EditUsedSpareRequestSheetState();
+}
+
+class _EditUsedSpareRequestSheetState
+    extends State<_EditUsedSpareRequestSheet> {
+  final _formKey = GlobalKey<FormState>();
+  final _picker = ImagePicker();
+  late final TextEditingController _make;
+  late final TextEditingController _model;
+  late final TextEditingController _year;
+  late final TextEditingController _spare;
+  final List<XFile> _newImages = [];
+  final List<Uint8List> _newImageBytes = [];
+  final Set<int> _removedImageIds = {};
+  bool _removeLegacyImage = false;
+  bool _saving = false;
+
+  List<Map<String, dynamic>> get _existingImages =>
+      _usedSparePhotos(widget.order)
+          .map(
+            (image) => image is Map
+                ? Map<String, dynamic>.from(image)
+                : <String, dynamic>{
+                    'id': null,
+                    'url': image.toString(),
+                    'legacy': true,
+                  },
+          )
+          .toList();
+
+  bool _isRemoved(Map<String, dynamic> photo) => photo['legacy'] == true
+      ? _removeLegacyImage
+      : _removedImageIds.contains(photo['id']);
+
+  void _removePhoto(Map<String, dynamic> photo) {
+    setState(() {
+      if (photo['legacy'] == true) {
+        _removeLegacyImage = true;
+      } else if (photo['id'] is int) {
+        _removedImageIds.add(photo['id'] as int);
+      }
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _make = TextEditingController(
+      text: widget.order['vehicle_make']?.toString() ?? '',
+    );
+    _model = TextEditingController(
+      text: widget.order['vehicle_model']?.toString() ?? '',
+    );
+    _year = TextEditingController(
+      text: widget.order['vehicle_year']?.toString() ?? '',
+    );
+    _spare = TextEditingController(
+      text: widget.order['spare_name']?.toString() ?? '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _make.dispose();
+    _model.dispose();
+    _year.dispose();
+    _spare.dispose();
+    super.dispose();
+  }
+
+  Future<void> _addPhotos() async {
+    final alreadyKept = _existingImages
+        .where((photo) => !_isRemoved(photo))
+        .length;
+    final capacity = 6 - alreadyKept - _newImages.length;
+    if (capacity <= 0) return;
+    try {
+      final picked = await _picker.pickMultiImage(imageQuality: 82);
+      if (picked.isEmpty) return;
+      final accepted = <XFile>[];
+      final bytesList = <Uint8List>[];
+      for (final image in picked.take(capacity)) {
+        final bytes = await image.readAsBytes();
+        if (bytes.length <= 5 * 1024 * 1024) {
+          accepted.add(image);
+          bytesList.add(bytes);
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _newImages.addAll(accepted);
+        _newImageBytes.addAll(bytesList);
+      });
+      if (accepted.length < picked.length && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You can add up to 6 photos, 5 MB each.'),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open your photo library.')),
+        );
+      }
+    }
+  }
+
+  Future<void> _save() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _saving = true);
+    try {
+      await widget.service.updateRequest(
+        id: widget.order['id'] as int,
+        fields: {
+          'vehicle_make': _make.text.trim(),
+          'vehicle_model': _model.text.trim(),
+          'vehicle_year': _year.text.trim(),
+          'spare_name': _spare.text.trim(),
+        },
+        images: _newImages,
+        removeImageIds: _removedImageIds.toList(),
+        removeLegacyImage: _removeLegacyImage,
+      );
+      if (mounted) Navigator.pop(context, true);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final keptImages = _existingImages
+        .where((photo) => !_isRemoved(photo))
+        .toList();
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SizedBox(
+        height: MediaQuery.sizeOf(context).height * .88,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 12, 10),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Edit spare request',
+                      style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Form(
+                key: _formKey,
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                  children: [
+                    TextFormField(
+                      controller: _make,
+                      decoration: const InputDecoration(
+                        labelText: 'Vehicle make',
+                      ),
+                      validator: _required,
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: _model,
+                      decoration: const InputDecoration(
+                        labelText: 'Vehicle model',
+                      ),
+                      validator: _required,
+                    ),
+                    const SizedBox(height: 10),
+                    TextFormField(
+                      controller: _year,
+                      decoration: const InputDecoration(
+                        labelText: 'Year (optional)',
+                      ),
+                      keyboardType: TextInputType.number,
+                      maxLength: 4,
+                      validator: (value) =>
+                          value != null &&
+                              value.isNotEmpty &&
+                              (value.length != 4 || int.tryParse(value) == null)
+                          ? 'Enter a valid 4-digit year.'
+                          : null,
+                    ),
+                    TextFormField(
+                      controller: _spare,
+                      decoration: const InputDecoration(
+                        labelText: 'Spare name (optional)',
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Photos',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          '${keptImages.length + _newImages.length}/6',
+                          style: const TextStyle(color: Color(0xFF71818B)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      'Remove photos or add clearer ones. Each photo can be up to 5 MB.',
+                      style: TextStyle(
+                        color: Colors.blueGrey.shade600,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        for (final photo in keptImages)
+                          _photoTile(
+                            Image.network(
+                              _usedSpareImageUrl(photo),
+                              width: 84,
+                              height: 84,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => const SizedBox(
+                                width: 84,
+                                height: 84,
+                                child: Icon(Icons.broken_image_outlined),
+                              ),
+                            ),
+                            () => _removePhoto(photo),
+                          ),
+                        for (var i = 0; i < _newImages.length; i++)
+                          _photoTile(
+                            Image.memory(
+                              _newImageBytes[i],
+                              width: 84,
+                              height: 84,
+                              fit: BoxFit.cover,
+                            ),
+                            () => setState(() {
+                              _newImages.removeAt(i);
+                              _newImageBytes.removeAt(i);
+                            }),
+                          ),
+                        if (keptImages.length + _newImages.length < 6)
+                          InkWell(
+                            onTap: _addPhotos,
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              width: 84,
+                              height: 84,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF3F7FA),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: const Color(0xFFDCE5EA),
+                                ),
+                              ),
+                              child: const Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.add_photo_alternate_outlined),
+                                  SizedBox(height: 4),
+                                  Text(
+                                    'Add photo',
+                                    style: TextStyle(fontSize: 10),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 12),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: _saving ? null : _save,
+                    child: _saving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Save changes'),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String? _required(String? value) =>
+      (value ?? '').trim().isEmpty ? 'This field is required.' : null;
+
+  Widget _photoTile(Widget image, VoidCallback remove) => Stack(
+    children: [
+      ClipRRect(borderRadius: BorderRadius.circular(10), child: image),
+      Positioned(
+        right: 3,
+        top: 3,
+        child: InkWell(
+          onTap: remove,
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: const BoxDecoration(
+              color: Colors.black54,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.close, size: 15, color: Colors.white),
+          ),
+        ),
+      ),
+    ],
   );
 }

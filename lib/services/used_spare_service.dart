@@ -65,12 +65,35 @@ class UsedSpareService {
     return Map<String, dynamic>.from(decoded as Map);
   }
 
-  Future<void> updateRequest(int id, Map<String, String> fields) async {
-    final response = await http.patch(
-      Uri.parse('$baseUrl${ApiEndpoints.customerUsedSpareRequests}$id/'),
-      headers: {...await _headers(), 'Content-Type': 'application/json'},
-      body: jsonEncode(fields),
-    );
+  Future<void> updateRequest({
+    required int id,
+    required Map<String, String> fields,
+    required List<XFile> images,
+    required List<int> removeImageIds,
+    required bool removeLegacyImage,
+  }) async {
+    final request =
+        http.MultipartRequest(
+            'PATCH',
+            Uri.parse('$baseUrl${ApiEndpoints.customerUsedSpareRequests}$id/'),
+          )
+          ..headers.addAll(await _headers())
+          ..fields.addAll(fields);
+    if (removeImageIds.isNotEmpty) {
+      request.fields['remove_image_ids'] = removeImageIds.join(',');
+    }
+    if (removeLegacyImage) request.fields['remove_legacy_image'] = 'true';
+    for (final image in images) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'images',
+          await image.readAsBytes(),
+          filename: image.name,
+        ),
+      );
+    }
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
     final decoded = jsonDecode(response.body);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(
